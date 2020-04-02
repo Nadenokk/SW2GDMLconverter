@@ -1,3 +1,5 @@
+// ConsoleApplication1.cpp: определяет точку входа для консольного приложения.
+//
 // SW2GDMLconverter.cpp : Console application that converts a SolidWorks design into GDML for Geant4
 //
 // Outstanding issues:
@@ -12,17 +14,18 @@
 
 #include "stdafx.h"
 //Import the SolidWorks type library
-#import "sldworks.tlb" raw_interfaces_only, raw_native_types, no_namespace, named_guids 
+#import "c:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\sldworks.tlb" raw_interfaces_only, raw_native_types, no_namespace, named_guids 
 
 //Import the SolidWorks constant type library    
-#import "swconst.tlb"  raw_interfaces_only, raw_native_types, no_namespace, named_guids  
+#import "c:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\swconst.tlb"  raw_interfaces_only, raw_native_types, no_namespace, named_guids  
 
-#import "swcommands.tlb"  
+#import "c:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\swcommands.tlb"  
 
 
 #include "atlbase.h"
 
 #define _USE_MATH_DEFINES
+#undef __STRICT_ANSI__
 #include <cmath>
 #include <iostream>
 #include <fstream>
@@ -31,6 +34,14 @@
 #include <unordered_set>
 #include <vector>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#ifndef M_PI_2
+#define M_PI_2 3.14159265358979323846/2
+#endif
+
 using namespace std;
 
 enum surfTypeIDs {
@@ -38,13 +49,13 @@ enum surfTypeIDs {
 	OFFSET_ID, EXTRUSION_ID, S_REVOLVE_ID, VOLUME_ID, POSITION_ID, ROTATION_ID, SUBTRACTION_ID, DISK_ID, BOARD_ID
 };
 
-const char *const surftypes[] = { "plane", "cylinder", "cone", "sphere", "torus", "bsurf", "blend", "offset", "extrusion",
+const char* const surftypes[] = { "plane", "cylinder", "cone", "sphere", "torus", "bsurf", "blend", "offset", "extrusion",
 "s-revolve", "vol", "pos", "rot", "subt", "disk", "board" };
 
 
 // The select types must be in correct order
-const char *const selectTypes[] = { "swSelNOTHING", "swSelEDGES", "swSelFACES", "swSelVERTICES", "swSelDATUMPLANES", "swSelDATUMAXES",
-		"swSelDATUMPOINTS", "swSelOLEITEMS", "swSelATTRIBUTES", "swSelSKETCHES", "swSelSKETCHSEGS", "swSelSKETCHPOINTS" };
+const char* const selectTypes[] = { "swSelNOTHING", "swSelEDGES", "swSelFACES", "swSelVERTICES", "swSelDATUMPLANES", "swSelDATUMAXES",
+"swSelDATUMPOINTS", "swSelOLEITEMS", "swSelATTRIBUTES", "swSelSKETCHES", "swSelSKETCHSEGS", "swSelSKETCHPOINTS" };
 
 static const int MAX_NUM_SEL_TYPES = 12;
 
@@ -52,7 +63,7 @@ static const float WORLD_BOX_SIZE = 100.0;
 static const float PART_BOX_SIZE = 99.0;
 
 
-static const char *const selectTypeStr(long selTypeID) {
+static const char* const selectTypeStr(long selTypeID) {
 	if (selTypeID < 0 || selTypeID >= MAX_NUM_SEL_TYPES)
 		selTypeID = 0;
 	return (selectTypes[selTypeID]);
@@ -66,8 +77,8 @@ static const double MIN_PART_SIZE = 0.0001; // Smallest size is 0.1 mm, ignore s
 
 
 typedef struct funcpair {
-	HRESULT(*boolFunc)(VARIANT_BOOL *arg);
-	HRESULT(*getParams)(VARIANT *arg);
+	HRESULT(*boolFunc)(VARIANT_BOOL* arg);
+	HRESULT(*getParams)(VARIANT* arg);
 } surfFuncs;
 
 static bool approxEqual(double val1, double val2) {
@@ -100,7 +111,7 @@ static bool dbllt(double val1, double val2) {
 
 class coords {
 public:
-	coords(double xval = 0.0, double yval = 0.0, double zval = 0.0, bool doNormalize = false) : 
+	coords(double xval = 0.0, double yval = 0.0, double zval = 0.0, bool doNormalize = false) :
 		x(xval), y(yval), z(zval)
 	{
 		x = checkZero(x);
@@ -110,7 +121,7 @@ public:
 			normalize();
 	}
 
-	coords(const coords &operand) {
+	coords(const coords& operand) {
 		x = checkZero(operand.x);
 		y = checkZero(operand.y);
 		z = checkZero(operand.z);
@@ -119,7 +130,7 @@ public:
 	double x, y, z;
 	double length() const
 	{
-		return (sqrt(x*x + y*y + z*z));
+		return (sqrt(x * x + y * y + z * z));
 	}
 
 	void normalize() {
@@ -131,7 +142,7 @@ public:
 		}
 	}
 
-	coords operator-(const coords &operand) const
+	coords operator-(const coords& operand) const
 	{
 		coords difference;
 		difference.x = x - operand.x;
@@ -146,7 +157,7 @@ public:
 		return (difference);
 	}
 
-	coords operator+(const coords &operand) const
+	coords operator+(const coords& operand) const
 	{
 		coords sum;
 		sum.x = x + operand.x;
@@ -161,14 +172,14 @@ public:
 		return (sum);
 	}
 
-	bool operator==(const coords &operand) const
+	bool operator==(const coords& operand) const
 	{
 		return (approxEqual(x, operand.x) &&
 			approxEqual(y, operand.y) &&
 			approxEqual(z, operand.z));
 	}
 
-	bool operator!=(const coords &operand) const
+	bool operator!=(const coords& operand) const
 	{
 		return ((*this == operand) == false);
 	}
@@ -181,7 +192,7 @@ public:
 		return (product);
 	}
 
-	coords& operator=(const coords &operand) {
+	coords& operator=(const coords& operand) {
 		x = checkZero(operand.x);
 		y = checkZero(operand.y);
 		z = checkZero(operand.z);
@@ -197,14 +208,14 @@ xaxisminus(-1.0, 0.0, 0.0), zaxisminus(0.0, 0.0, -1.0),
 origin(0, 0, 0);
 
 
-ostream & operator<<(ostream &os, const coords &coordval) {
+ostream& operator<<(ostream& os, const coords& coordval) {
 	os << "(" << coordval.x << ", " << coordval.y << ", " << coordval.z << ") ";
 	return (os);
 }
 
 
 struct coordHash {
-	size_t operator() (const coords &param) const {
+	size_t operator() (const coords& param) const {
 		std::stringstream strval;
 		strval << param;
 		std::hash<string> hashfn;
@@ -215,7 +226,7 @@ struct coordHash {
 };
 
 struct coordCmp {
-	bool operator() (const coords &first, const coords &second) const {
+	bool operator() (const coords& first, const coords& second) const {
 		return (first == second);
 	}
 };
@@ -223,14 +234,14 @@ struct coordCmp {
 typedef unordered_map<coords, int, coordHash, coordCmp> coordList;
 
 
-double dotProd(const coords &fac1, const coords &fac2) {
+double dotProd(const coords& fac1, const coords& fac2) {
 	double xpd = fac1.x * fac2.x;
 	double ypd = fac1.y * fac2.y;
 	double zpd = fac1.z * fac2.z;
 	return (xpd + ypd + zpd);
 }
 
-coords crossProd(const coords &fac1, const coords &fac2) {
+coords crossProd(const coords& fac1, const coords& fac2) {
 	coords prod;
 	prod.x = (fac1.y * fac2.z) - (fac1.z * fac2.y);
 	prod.y = (fac1.z * fac2.x) - (fac1.x * fac2.z);
@@ -244,7 +255,7 @@ public:
 	matrix3x3() : goodValues(false)
 	{}
 
-	void setCol(const coords &colVal, unsigned index) {
+	void setCol(const coords& colVal, unsigned index) {
 		if (index < 3) {
 			goodValues = true;
 			matrix2d[0][index] = colVal.x;
@@ -254,7 +265,7 @@ public:
 		else cout << "Index too large " << index << endl;
 	}
 
-	coords operator*(const coords &val) {
+	coords operator*(const coords& val) {
 		coords product;
 		if (goodValues) {
 			coords row(matrix2d[0][0], matrix2d[0][1], matrix2d[0][2]);
@@ -285,7 +296,7 @@ public:
 		bool isID = true;
 		for (unsigned col = 0; isID && (col < 3); ++col) {
 			for (unsigned row = 0; isID && (row < 3); ++row) {
-				if (row == col )
+				if (row == col)
 					isID = (isID && matrix2d[row][col] == 1.0);
 				else isID = (isID && matrix2d[row][col] == 0.0);
 			}
@@ -298,7 +309,7 @@ public:
 };
 
 
-ostream & operator<<(ostream &os, const matrix3x3 &mat) {
+ostream& operator<<(ostream& os, const matrix3x3& mat) {
 	for (unsigned row = 0; row < 3; ++row) {
 		os << "[ ";
 		for (unsigned col = 0; col < 3; ++col) {
@@ -336,35 +347,35 @@ class EllipsoidSurf;
 
 class GenericSurf {
 public:
-	GenericSurf(long surfIDVal, ISurface *swSurf) :
+	GenericSurf(long surfIDVal, ISurface* swSurf) :
 		radiusTmp(0), areaTmp(0), diameterTmp(0), perimeterTmp(0),
 		angleTmp(2.0 * M_PI), lengthTmp(0), surfID(surfIDVal), surfPtr(swSurf),
 		wasOutput(false), valid(true), subType(BOARD_ID) // Not used for non-plane surfaces
 	{}
 
-	virtual HRESULT boolFunc(VARIANT_BOOL *arg, ISurface *surfPtr) = 0;
-	virtual HRESULT getParams(VARIANT *arg, ISurface *surfPtr) = 0;
+	virtual HRESULT boolFunc(VARIANT_BOOL* arg, ISurface* surfPtr) = 0;
+	virtual HRESULT getParams(VARIANT* arg, ISurface* surfPtr) = 0;
 
 	virtual double size() = 0;
 
-	virtual CylSurf *cylPtr() {
+	virtual CylSurf* cylPtr() {
 		cout << "Bad call -- CylSurf should override\n";
 		return (NULL);
 	}
 
-	virtual ConeSurf *conePtr() {
+	virtual ConeSurf* conePtr() {
 		return (NULL);
 	}
-	virtual TorusSurf *torusPtr() {
+	virtual TorusSurf* torusPtr() {
 		return (NULL);
 	}
-	virtual DiskSurf *diskPtr() {
+	virtual DiskSurf* diskPtr() {
 		return (NULL);
 	}
-	virtual BoardSurf *boardPtr() {
+	virtual BoardSurf* boardPtr() {
 		return (NULL);
 	}
-	virtual EllipsoidSurf *ellipsoidPtr() {
+	virtual EllipsoidSurf* ellipsoidPtr() {
 		return (NULL);
 	}
 
@@ -389,8 +400,8 @@ public:
 
 	double radiusTmp, areaTmp, diameterTmp, perimeterTmp, angleTmp, lengthTmp; // Just for temporary holding of values.
 
-	const char *surfName();
-	double showSurfParams(AssemblyInfo *assembly);
+	const char* surfName();
+	double showSurfParams(AssemblyInfo* assembly);
 
 	long surfID;
 	bool wasOutput, valid;
@@ -399,11 +410,11 @@ public:
 	string matNameStr, compNameStr, pathNameStr, featureTypeStr;
 
 
-	virtual bool sameBody(GenericSurf *second, bool unused = false)
+	virtual bool sameBody(GenericSurf* second, bool unused = false)
 	{
 		// Check same position, same axis, and same component
 		if (second != NULL && position == second->position && axis == second->axis &&
-				compNameStr.compare(second->compNameStr) == 0)
+			compNameStr.compare(second->compNameStr) == 0)
 			return (true);
 		return (false);
 	}
@@ -424,22 +435,22 @@ public:
 	coords displace;
 	coords overallRot;
 	matrix3x3 overallRotMatrix;
-	IFace2 *facePtr;
+	IFace2* facePtr;
 
 protected:
-	ISurface *surfPtr;
+	ISurface* surfPtr;
 	surfTypeIDs subType;
 };
 
 class ConeSurf : public GenericSurf {
 public:
-	ConeSurf(long surfIDVal, ISurface *swSurf) : GenericSurf(surfIDVal, swSurf), smRadius(0.0), lgRadius(0.0), height(0.0)
+	ConeSurf(long surfIDVal, ISurface* swSurf) : GenericSurf(surfIDVal, swSurf), smRadius(0.0), lgRadius(0.0), height(0.0)
 	{}
 
-	virtual HRESULT boolFunc(VARIANT_BOOL *arg, ISurface *surfPtr) {
+	virtual HRESULT boolFunc(VARIANT_BOOL* arg, ISurface* surfPtr) {
 		return (surfPtr->IsCone(arg));
 	}
-	virtual HRESULT getParams(VARIANT *arg, ISurface *surfPtr) {
+	virtual HRESULT getParams(VARIANT* arg, ISurface* surfPtr) {
 		return (surfPtr->get_ConeParams(arg));
 	}
 
@@ -481,13 +492,13 @@ public:
 		return (height);
 	}
 
-	virtual ConeSurf *conePtr() {
+	virtual ConeSurf* conePtr() {
 		return (this);
 	}
 
-	virtual bool sameBody(GenericSurf *second, bool unused = false) {
+	virtual bool sameBody(GenericSurf* second, bool unused = false) {
 		if (GenericSurf::sameBody(second)) {
-			ConeSurf *secondCone = second->conePtr();
+			ConeSurf* secondCone = second->conePtr();
 			if (secondCone != NULL) {
 				cout << "smRadii " << smRadius << " " << secondCone->smRadius << endl;
 				cout << "lgRadii " << lgRadius << " " << secondCone->lgRadius << endl;
@@ -506,13 +517,13 @@ public:
 
 class CylSurf : public GenericSurf {
 public:
-	CylSurf(long surfIDVal, ISurface *swSurf) : GenericSurf(surfIDVal, swSurf), radius(0.0), length(0.0), angle(2.0 * M_PI)
+	CylSurf(long surfIDVal, ISurface* swSurf) : GenericSurf(surfIDVal, swSurf), radius(0.0), length(0.0), angle(2.0 * M_PI)
 	{}
 
-	virtual HRESULT boolFunc(VARIANT_BOOL *arg, ISurface *surfPtr) {
+	virtual HRESULT boolFunc(VARIANT_BOOL* arg, ISurface* surfPtr) {
 		return (surfPtr->IsCylinder(arg));
 	}
-	virtual HRESULT getParams(VARIANT *arg, ISurface *surfPtr) {
+	virtual HRESULT getParams(VARIANT* arg, ISurface* surfPtr) {
 		return (surfPtr->get_CylinderParams(arg));
 	}
 
@@ -529,12 +540,12 @@ public:
 			radius = checkZero(rad, MIN_PART_SIZE);
 
 		// Don't use lengthVal if it is circumference
-		if (lengthVal > length && approxEqual(lengthVal, diameter / M_PI) == false)
+		if (lengthVal > length&& approxEqual(lengthVal, diameter / M_PI) == false)
 			length = checkZero(lengthVal, MIN_PART_SIZE);
 		else if (area > 0 && diameter > 0.0) {
-			 double newLength = area / (M_PI * diameter);
-			 if (newLength > 0.0)
-				 length = checkZero(newLength, MIN_PART_SIZE);
+			double newLength = area / (M_PI * diameter);
+			if (newLength > 0.0)
+				length = checkZero(newLength, MIN_PART_SIZE);
 		}
 		return (radius > 0 && length >= 0.001 && angle > 0); // Omit tiny cylinders
 	}
@@ -558,23 +569,23 @@ public:
 
 	// friend const char *outputCylDesc(const CylSurf *const surf1, const CylSurf *const surf2);
 
-	virtual CylSurf *cylPtr() {
+	virtual CylSurf* cylPtr() {
 		return (this);
 	}
 
-	virtual bool sameBodyLoose(CylSurf *secondCyl) {
+	virtual bool sameBodyLoose(CylSurf* secondCyl) {
 		if (secondCyl != NULL)
 			return (approxEqual(angle, secondCyl->angle) &&
-			approxEqual(length, secondCyl->length));	// Allow differing radii
+				approxEqual(length, secondCyl->length));	// Allow differing radii
 		return (false);
 	}
 
-	virtual bool sameBody(GenericSurf *second, bool loose = false) {
+	virtual bool sameBody(GenericSurf* second, bool loose = false) {
 		if (GenericSurf::sameBody(second, loose)) {
-			CylSurf *secondCyl = second->cylPtr();
+			CylSurf* secondCyl = second->cylPtr();
 			if (secondCyl != NULL)
 				return (sameBodyLoose(secondCyl) && (loose || approxEqual(radius, secondCyl->radius) &&
-				approxEqual(angle * radius, secondCyl->angle * secondCyl->radius)));
+					approxEqual(angle * radius, secondCyl->angle * secondCyl->radius)));
 		}
 		return (false);
 	}
@@ -582,14 +593,14 @@ public:
 
 class TorusSurf : public GenericSurf {
 public:
-	TorusSurf(long surfIDVal, ISurface *swSurf) : GenericSurf(surfIDVal, swSurf), 
+	TorusSurf(long surfIDVal, ISurface* swSurf) : GenericSurf(surfIDVal, swSurf),
 		smRadius(0.0), lgRadius(0.0), majorRadius(0.0), angle(2.0 * M_PI)
 	{}
 
-	virtual HRESULT boolFunc(VARIANT_BOOL *arg, ISurface *surfPtr) {
+	virtual HRESULT boolFunc(VARIANT_BOOL* arg, ISurface* surfPtr) {
 		return (surfPtr->IsTorus(arg));
 	}
-	virtual HRESULT getParams(VARIANT *arg, ISurface *surfPtr) {
+	virtual HRESULT getParams(VARIANT* arg, ISurface* surfPtr) {
 		return (surfPtr->get_TorusParams(arg));
 	}
 
@@ -619,7 +630,7 @@ public:
 		return (majorRadius);
 	}
 
-	virtual TorusSurf *torusPtr() {
+	virtual TorusSurf* torusPtr() {
 		return (this);
 	}
 
@@ -628,9 +639,9 @@ public:
 		return (angle);
 	}
 
-	virtual bool sameBody(GenericSurf *second, bool unused = false) {
+	virtual bool sameBody(GenericSurf* second, bool unused = false) {
 		if (GenericSurf::sameBody(second)) {
-			TorusSurf *secondTorus = second->torusPtr();
+			TorusSurf* secondTorus = second->torusPtr();
 			if (secondTorus != NULL) {
 				cout << "smRadii " << smRadius << " " << secondTorus->smRadius << endl;
 				cout << "lgRadii " << lgRadius << " " << secondTorus->lgRadius << endl;
@@ -650,17 +661,17 @@ public:
 
 class PlaneSurf : public GenericSurf {
 public:
-	PlaneSurf(long surfIDVal, ISurface *swSurf) : GenericSurf(surfIDVal, swSurf)
+	PlaneSurf(long surfIDVal, ISurface* swSurf) : GenericSurf(surfIDVal, swSurf)
 	{}
 
-	PlaneSurf(const GenericSurf &tmp) : GenericSurf(tmp)
+	PlaneSurf(const GenericSurf& tmp) : GenericSurf(tmp)
 	{}
 
 
-	virtual HRESULT boolFunc(VARIANT_BOOL *arg, ISurface *surfPtr) {
+	virtual HRESULT boolFunc(VARIANT_BOOL* arg, ISurface* surfPtr) {
 		return (surfPtr->IsPlane(arg));
 	}
-	virtual HRESULT getParams(VARIANT *arg, ISurface *surfPtr) {
+	virtual HRESULT getParams(VARIANT* arg, ISurface* surfPtr) {
 		return (surfPtr->get_PlaneParams(arg));
 	}
 
@@ -672,12 +683,12 @@ public:
 
 class DiskSurf : public PlaneSurf {
 public:
-	DiskSurf(long surfIDVal, ISurface *swSurf) : PlaneSurf(surfIDVal, swSurf), inRadius(0.0), outRadius(0.0), angle(2.0 * M_PI)
+	DiskSurf(long surfIDVal, ISurface* swSurf) : PlaneSurf(surfIDVal, swSurf), inRadius(0.0), outRadius(0.0), angle(2.0 * M_PI)
 	{
 		subType = DISK_ID;
 	}
 
-	DiskSurf(const GenericSurf &tmp) : PlaneSurf(tmp), inRadius(0.0),
+	DiskSurf(const GenericSurf& tmp) : PlaneSurf(tmp), inRadius(0.0),
 		outRadius(tmp.radiusTmp), angle(tmp.angleTmp)
 	{
 		subType = DISK_ID;
@@ -723,16 +734,16 @@ public:
 
 	// friend const char *outputCylDesc(const CylSurf *const surf1, const CylSurf *const surf2);
 
-	virtual DiskSurf *diskPtr() {
+	virtual DiskSurf* diskPtr() {
 		return (this);
 	}
 
-	virtual bool sameBody(GenericSurf *second, bool unused = false) {
+	virtual bool sameBody(GenericSurf* second, bool unused = false) {
 		if (GenericSurf::sameBody(second)) {
-			DiskSurf *secondDisk = second->diskPtr();
+			DiskSurf* secondDisk = second->diskPtr();
 			if (secondDisk != NULL)
 				return (approxEqual(inRadius, secondDisk->inRadius) &&
-				approxEqual(outRadius, secondDisk->outRadius) && approxEqual(angle * inRadius, secondDisk->angle * secondDisk->inRadius));
+					approxEqual(outRadius, secondDisk->outRadius) && approxEqual(angle * inRadius, secondDisk->angle * secondDisk->inRadius));
 		}
 		return (false);
 	}
@@ -746,10 +757,10 @@ public:
 
 class BoardSurf : public PlaneSurf {
 public:
-	BoardSurf(long surfIDVal, ISurface *swSurf) : PlaneSurf(surfIDVal, swSurf), length(0.0), width(0.0), consistentVals(true)
+	BoardSurf(long surfIDVal, ISurface* swSurf) : PlaneSurf(surfIDVal, swSurf), length(0.0), width(0.0), consistentVals(true)
 	{}
 
-	BoardSurf(const GenericSurf &tmp) : PlaneSurf(tmp), length(tmp.lengthTmp), width(0.0), consistentVals(true)
+	BoardSurf(const GenericSurf& tmp) : PlaneSurf(tmp), length(tmp.lengthTmp), width(0.0), consistentVals(true)
 	{}
 
 	virtual bool setSize(double unused5, double unused1, double unused4, double unused2, double unused3, double lengthVal)
@@ -778,15 +789,15 @@ public:
 	double length, width;
 	bool consistentVals; // Flag to show whether setting inconsistent values was attempted
 
-	// friend const char *outputCylDesc(const CylSurf *const surf1, const CylSurf *const surf2);
+						 // friend const char *outputCylDesc(const CylSurf *const surf1, const CylSurf *const surf2);
 
-	virtual BoardSurf *boardPtr() {
+	virtual BoardSurf* boardPtr() {
 		return (this);
 	}
 
-	virtual bool sameBody(GenericSurf *second, bool unused = false) {
+	virtual bool sameBody(GenericSurf* second, bool unused = false) {
 		if (GenericSurf::sameBody(second)) {
-			BoardSurf *secondBoard = second->boardPtr();
+			BoardSurf* secondBoard = second->boardPtr();
 			if (secondBoard != NULL)
 				return (approxEqual(length, secondBoard->length) && approxEqual(width, secondBoard->width));
 		}
@@ -799,14 +810,14 @@ public:
 class EllipsoidSurf : public GenericSurf {
 	// Currently only implementing half-ellipsoid with circular face
 public:
-	EllipsoidSurf(long surfIDVal, ISurface *swSurf) : GenericSurf(surfIDVal, swSurf),
+	EllipsoidSurf(long surfIDVal, ISurface* swSurf) : GenericSurf(surfIDVal, swSurf),
 		ax(0.0), by(0.0), cz(0.0), zcutLow(0.0), zcutHi(0.0)
 	{}
 
-	virtual HRESULT boolFunc(VARIANT_BOOL *arg, ISurface *surfPtr) {
+	virtual HRESULT boolFunc(VARIANT_BOOL* arg, ISurface* surfPtr) {
 		return (surfPtr->IsRevolved(arg));
 	}
-	virtual HRESULT getParams(VARIANT *arg, ISurface *surfPtr) {
+	virtual HRESULT getParams(VARIANT* arg, ISurface* surfPtr) {
 		return (surfPtr->GetRevsurfParams(arg));
 	}
 
@@ -836,17 +847,17 @@ public:
 
 	double ax, by, cz, zcutLow, zcutHi;
 
-	virtual EllipsoidSurf *ellipsoidPtr() {
+	virtual EllipsoidSurf* ellipsoidPtr() {
 		return (this);
 	}
 
-	virtual bool sameBody(GenericSurf *second, bool unused = false) {
+	virtual bool sameBody(GenericSurf* second, bool unused = false) {
 		if (GenericSurf::sameBody(second)) {
-			EllipsoidSurf *secondEll = second->ellipsoidPtr();
+			EllipsoidSurf* secondEll = second->ellipsoidPtr();
 			if (secondEll != NULL)
 				return (approxEqual(ax, secondEll->ax) &&
-				approxEqual(by, secondEll->by) && approxEqual(cz, secondEll->cz) &&
-				approxEqual(zcutLow, secondEll->zcutLow) && approxEqual(zcutHi, secondEll->zcutHi));
+					approxEqual(by, secondEll->by) && approxEqual(cz, secondEll->cz) &&
+					approxEqual(zcutLow, secondEll->zcutLow) && approxEqual(zcutHi, secondEll->zcutHi));
 		}
 		return (false);
 	}
@@ -855,38 +866,38 @@ public:
 class shapeList {
 public:
 	vector<int> shapeInds;
-	virtual  string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly) = 0;
+	virtual  string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly) = 0;
 };
 
 class cylinderList : public shapeList {
 public:
-	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly);
+	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly);
 };
 
 
 class conesList : public shapeList {
 public:
-	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly);
+	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly);
 };
 
 class torusesList : public shapeList {
 public:
-	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly);
+	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly);
 };
 
 class disksList : public shapeList {
 public:
-	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly);
+	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly);
 };
 
 class boardsList : public shapeList {
 public:
-	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly);
+	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly);
 };
 
 class ellipList : public shapeList {
 public:
-	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly);
+	virtual string outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly);
 };
 
 typedef vector < pair<coords, int> > centerSurfIndArray;
@@ -894,19 +905,19 @@ typedef vector < pair<coords, int> > centerSurfIndArray;
 template<class T>
 class PatternFuncs {
 public:
-	virtual double getSpacing(T *patternType, AssemblyInfo &assembly) = 0;
+	virtual double getSpacing(T* patternType, AssemblyInfo& assembly) = 0;
 };
 
 template<class T>
 class LinPattFuncs : public PatternFuncs<T> {
 public:
-	virtual double getSpacing(T *patternType, AssemblyInfo &assembly) override;
+	virtual double getSpacing(T* patternType, AssemblyInfo& assembly) override;
 };
 
 template<class T>
 class CircPattFuncs : public PatternFuncs<T> {
 public:
-	virtual double getSpacing(T *patternType, AssemblyInfo &assembly) override;
+	virtual double getSpacing(T* patternType, AssemblyInfo& assembly) override;
 };
 
 
@@ -916,50 +927,50 @@ public:
 		surfArrayInd(-1), after1stComp(false)
 	{}
 
-	void calcmeasure(CComPtr<IMeasure> &mymeasure, VARIANT &oneface, double radius, long surfID, double &sideLen);
+	void calcmeasure(CComPtr<IMeasure>& mymeasure, VARIANT& oneface, double radius, long surfID, double& sideLen);
 	void outputParts();
 	void outputPartBoxes();
-	void outputSolids(shapeList *sList, bool looseMatch = false, bool singleSolids = false);
+	void outputSolids(shapeList* sList, bool looseMatch = false, bool singleSolids = false);
 	void centerPosition();
-	void getEdgeDist(IFace2 *const faceptr, CComPtr<IMeasure> &mymeasure, long surfID, double radius);
-	void showFaceDetails(LPDISPATCH *srcptr, int srcindex, double *radius, long *surfID, CComPtr<IMeasure> &mymeasure);
-	void outputShapeSetPart(shapeList *sList, const int ind1, const int ind2, bool averagePos = true);
+	void getEdgeDist(IFace2* const faceptr, CComPtr<IMeasure>& mymeasure, long surfID, double radius);
+	void showFaceDetails(LPDISPATCH* srcptr, int srcindex, double* radius, long* surfID, CComPtr<IMeasure>& mymeasure);
+	void outputShapeSetPart(shapeList* sList, const int ind1, const int ind2, bool averagePos = true);
 	void outputHole(const long baseInd, const long holeInd);
-	void breakUpFaces(shapeList *sList);
-	void findHoles(shapeList *sList);
-	bool getLineInfo(CComPtr<ICurve> curveptr, sideInfo &thisSide);
+	void breakUpFaces(shapeList* sList);
+	void findHoles(shapeList* sList);
+	bool getLineInfo(CComPtr<ICurve> curveptr, sideInfo& thisSide);
 	void calcBoard();
 	void getInitRot(const int index);
-	coords getStartAxis(IEdge *const edgeptr, const coords &center, const coords &axis, double circRad, coords &endAxis);
+	coords getStartAxis(IEdge* const edgeptr, const coords& center, const coords& axis, double circRad, coords& endAxis);
 	coords getbcurve(CComPtr<ICurve> curveptr);
-	void getMates(IComponent2 *swSelectedComponent);
+	void getMates(IComponent2* swSelectedComponent);
 	// void showMateEntity(CComPtr<IFeature> swFeature);
-	void showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt, coordList &displaceList,
-		int mateInd, bool &adjustDisplace, int mateCnt, bool &meRadiiSame);
-	void resetAxis(const coords &center, const coords &startVertex, const coords &endVertex);
-	coords choseStartAxis(const coords &center, const coords &radVec, const coords &normal,
-		const coords &startVertex, const coords &endVertex, coords &endAxis);
-	void getSeedComps(ILocalLinearPatternFeatureData *const linpattern);
-	void getRelatedComps(IComponent2 *baseComp);
-	void getTransfDisplace(ILocalLinearPatternFeatureData *linpattern, double xspacing, double zspacing);
+	void showMate(IMate2* matePtr, coords& antiAlignTot, int& alignCnt, coordList& displaceList,
+		int mateInd, bool& adjustDisplace, int mateCnt, bool& meRadiiSame);
+	void resetAxis(const coords& center, const coords& startVertex, const coords& endVertex);
+	coords choseStartAxis(const coords& center, const coords& radVec, const coords& normal,
+		const coords& startVertex, const coords& endVertex, coords& endAxis);
+	void getSeedComps(ILocalLinearPatternFeatureData* const linpattern);
+	void getRelatedComps(IComponent2* baseComp);
+	void getTransfDisplace(ILocalLinearPatternFeatureData* linpattern, double xspacing, double zspacing);
 	void findTorusCenter();
 	void chkEllipAxis();
-	void chkPatterns(CComPtr<IFeature> swFeature, IModelDoc2* swModel, const CComBSTR &sTypeName);
+	void chkPatterns(CComPtr<IFeature> swFeature, IModelDoc2* swModel, const CComBSTR& sTypeName);
 	template<typename T>
-	void procPattern(CComPtr<IFeature> swFeature, IModelDoc2* swModel, PatternFuncs<T> *pattfuncs);
-	void doClosestAlign(const long index, coords &newAxis, const coords &direction);
-	void doAligned(int &alignCnt, bool &adjustDisplace, coords &location, const long index,
-		const long mateRefType, const int mateCnt, const long mateType, const coords &direction);
-	void doAntiAligned(bool &adjustDisplace, coords &location, const long index,
-		const long mateRefType, const int mateCnt, const coords &direction, const coords &direction1);
-	void getMateFaces(IMate2 *const matePtr) const;
-	void calcMateDisplace(const coords &posNoDispl);
-	void checkMateRot(const coords &normal);
+	void procPattern(CComPtr<IFeature> swFeature, IModelDoc2* swModel, PatternFuncs<T>* pattfuncs);
+	void doClosestAlign(const long index, coords& newAxis, const coords& direction);
+	void doAligned(int& alignCnt, bool& adjustDisplace, coords& location, const long index,
+		const long mateRefType, const int mateCnt, const long mateType, const coords& direction);
+	void doAntiAligned(bool& adjustDisplace, coords& location, const long index,
+		const long mateRefType, const int mateCnt, const coords& direction, const coords& direction1);
+	void getMateFaces(IMate2* const matePtr) const;
+	void calcMateDisplace(const coords& posNoDispl);
+	void checkMateRot(const coords& normal);
 	void outputPhysVols();
-	void getMateEdge(IEntity  *const mateRefPtr, const coords &location, const coords &direction, bool &adjustDisplace);
-	void getTransf(IComponent2 *swSelectedComponent);
+	void getMateEdge(IEntity* const mateRefPtr, const coords& location, const coords& direction, bool& adjustDisplace);
+	void getTransf(IComponent2* swSelectedComponent);
 
-	vector<GenericSurf *> surfArray;
+	vector<GenericSurf*> surfArray;
 	int surfArrayInd;
 	bool after1stComp;
 	char matNameStr[80];
@@ -1004,7 +1015,7 @@ protected:
 		coords displpos, displdir, axis;
 		bool edgeSet, faceRot, pendingDisplace;
 		int startIndex;
-		const IFace2 *faceptr;
+		const IFace2* faceptr;
 	} mateInfo;
 
 };
@@ -1013,7 +1024,7 @@ VARIANT_BOOL retVal = VARIANT_FALSE;
 
 HRESULT hres = NOERROR, hres2 = NOERROR;
 
-const char *const cylname = "tube", *const conename = "cone";
+const char* const cylname = "tube", * const conename = "cone";
 
 //Function prototypes
 void OpenAssembly(ISldWorks* swApp, IModelDoc2** swModel);
@@ -1025,13 +1036,13 @@ static ofstream gdmlout;
 
 class xmlElem {
 protected:
-	enum unitTypes {LEN_UNIT, POS_UNIT, NO_UNIT};
+	enum unitTypes { LEN_UNIT, POS_UNIT, NO_UNIT };
 
 public:
 	xmlElem() : printUnits(NO_UNIT)
 	{}
 
-	const char *openElem(const char *label = NULL, const char *attrib = NULL, bool separate = false) {
+	const char* openElem(const char* label = NULL, const char* attrib = NULL, bool separate = false) {
 		outputStr = "<";
 		if (label != NULL) {
 			outputStr += label;
@@ -1046,16 +1057,16 @@ public:
 		return (outputStr.c_str());
 	}
 
-	const char *openLenElem(const char *label) { // Begin an element that includes a length
+	const char* openLenElem(const char* label) { // Begin an element that includes a length
 		printUnits = LEN_UNIT;
 		return (openElem(label));
 	}
 
-	const char *openSepElem(const char *label = NULL, const char *attrib = NULL) {
+	const char* openSepElem(const char* label = NULL, const char* attrib = NULL) {
 		return (openElem(label, attrib, true));
 	}
 
-	const char *closeElem(const char *label = NULL, bool separate = false) {
+	const char* closeElem(const char* label = NULL, bool separate = false) {
 		if (separate)
 			outputStr = "</";
 		else if (printUnits != NO_UNIT) {
@@ -1072,11 +1083,11 @@ public:
 		return (outputStr.c_str());
 	}
 
-	const char *closeSepElem(const char *label = NULL) {
+	const char* closeSepElem(const char* label = NULL) {
 		return (closeElem(label, true));
 	}
 
-	const char *attribute(const char *name, const char *value) {
+	const char* attribute(const char* name, const char* value) {
 		outputStr = " ";
 		outputStr += name;
 		outputStr += "=\"";
@@ -1085,13 +1096,13 @@ public:
 		return (outputStr.c_str());
 	}
 
-	const char *attribute(const char *name, double value) {
+	const char* attribute(const char* name, double value) {
 		char numstr[50];
 		sprintf_s(numstr, "%g", value);
 		return (attribute(name, numstr));
 	}
 
-	const char *indent(int numSpaces = 1) {
+	const char* indent(int numSpaces = 1) {
 		outputStr = " ";
 		for (int cnt = 1; cnt < numSpaces; ++cnt)
 			outputStr += " ";
@@ -1102,11 +1113,11 @@ protected:
 	unitTypes printUnits;
 };
 
-const char *const indent1 = " ", *const indent2 = "  ", *const indent3 = "   ";
-const char *const endOpen = ">";
+const char* const indent1 = " ", * const indent2 = "  ", * const indent3 = "   ";
+const char* const endOpen = ">";
 
 static bool begingdml() {
-	if (CopyFileA("template.gdml", "design.gdml", false) == false) {
+	if (CopyFileA("C:\\Users\\Nadya\\Desktop\\SW2GDMLconverter-master\\template.gdml", "design.gdml", false) == false) {
 		std::cout << "Couldn't copy gdml template\n";
 		return (false);
 	}
@@ -1114,16 +1125,16 @@ static bool begingdml() {
 }
 
 
-static void printbstr(const char *textout, const CComBSTR &instr)
+static void printbstr(const char* textout, const CComBSTR& instr)
 {
 	CW2A outstr(instr);
 	cout << textout << outstr << endl;
 }
 
 
-const char *const nameIncr(surfTypeIDs itemcode)
+const char* const nameIncr(surfTypeIDs itemcode)
 {
-	static int itemCnt[sizeof(surftypes) / sizeof(const char *const)];
+	static int itemCnt[sizeof(surftypes) / sizeof(const char* const)];
 	int index = itemcode - 4001;
 	static string name;
 	name = surftypes[index];
@@ -1134,14 +1145,14 @@ const char *const nameIncr(surfTypeIDs itemcode)
 }
 
 
-const char *const anyNameIncr(const string &basename)
+const char* const anyNameIncr(const string& basename)
 {
 	static unordered_map<string, int> nameList;
 	static string name;
 	name = basename;
 	if (name.length() == 0)
 		name = "null";
-	int &cnt = nameList[name];
+	int& cnt = nameList[name];
 	++cnt;
 	char numstr[32];
 	sprintf_s(numstr, "_%d", cnt);
@@ -1178,7 +1189,7 @@ static double calcAngle(double val1, double val2) {
 }
 
 // calcCoords defaults to assumption angle is rotation of axis, not of object
-static void calcCoords(double angle, double &val1, double &val2, bool rotAxis = true)
+static void calcCoords(double angle, double& val1, double& val2, bool rotAxis = true)
 {
 	if (rotAxis)
 		angle = -angle;
@@ -1189,7 +1200,7 @@ static void calcCoords(double angle, double &val1, double &val2, bool rotAxis = 
 	chkAngle *= 2.0;
 	double lengthsqd = val1 * val1 + val2 * val2;
 	// cout << "val1, val2 = " << val1 << ", " << val2 << " length2 = " << lengthsqd << " newangle = " << newAngle << endl;
-	int intAngle = (int) (chkAngle + 0.2);
+	int intAngle = (int)(chkAngle + 0.2);
 	if (approxEqual(chkAngle, intAngle) && (intAngle % 2) == 1) { // chkAngle is n/2
 		val1 = 0.0;
 		val2 = sqrt(lengthsqd);
@@ -1202,16 +1213,16 @@ static void calcCoords(double angle, double &val1, double &val2, bool rotAxis = 
 		val2 = tan(newAngle) * val1;
 		// cout << "val1, val2 = " << val1 << ", " << val2 << " length2 = " << lengthsqd << " newangle = " << newAngle << endl;
 	}
-	if (val2 > 0.0 && ((newAngle > M_PI && newAngle < (2.0 * M_PI)) || (newAngle < 0 && newAngle > (-M_PI))))
+	if (val2 > 0.0 && ((newAngle > M_PI&& newAngle < (2.0 * M_PI)) || (newAngle < 0 && newAngle >(-M_PI))))
 		val2 = -val2;
 	val2 = checkZero(val2);
 	// if (val2 == 0) {
-		// cout << "val1, val2 = " << val1 << ", " << val2 << " length2 = " << lengthsqd << " newangle = " << newAngle << endl;
+	// cout << "val1, val2 = " << val1 << ", " << val2 << " length2 = " << lengthsqd << " newangle = " << newAngle << endl;
 	// }
 }
 
 
-static double axisrot(double &start1, double &start2, double end1, double end2, bool rotAxis = true)
+static double axisrot(double& start1, double& start2, double end1, double end2, bool rotAxis = true)
 {
 	if ((start1 == 0.0 && start2 == 0.0) || (end1 == 0.0 && end2 == 0.0))
 		return (0.0);	// To/from origin, no rotation possible
@@ -1234,7 +1245,7 @@ static double axisrot(double &start1, double &start2, double end1, double end2, 
 
 
 // rotVecZYX does rotation of axis, not object
-static coords rotVecZYX(const coords &vec, const coords &angle)
+static coords rotVecZYX(const coords& vec, const coords& angle)
 {
 	coords newvec(vec);
 	// GDML appears to do zyx rotation order for volumes
@@ -1252,7 +1263,7 @@ static coords rotVecZYX(const coords &vec, const coords &angle)
 
 
 // rotVecXYZ does rotation of object, not axis
-static coords rotVecXYZ(const coords &vec, const coords &angle)
+static coords rotVecXYZ(const coords& vec, const coords& angle)
 {
 	coords newvec(vec);
 	// GDML appears to do XYZ rotation order for boolean solids
@@ -1267,7 +1278,7 @@ static coords rotVecXYZ(const coords &vec, const coords &angle)
 
 
 // rotAnglesZYX does rotation of axis, not object
-static coords rotAnglesZYX(coords start, const coords &end)
+static coords rotAnglesZYX(coords start, const coords& end)
 {
 	coords angle;
 	// GDML appears to do zyx rotation order for volumes
@@ -1298,7 +1309,7 @@ static coords rotAnglesZYX(coords start, const coords &end)
 
 
 // rotAnglesXYZ does rotation of object, not axis
-static coords rotAnglesXYZ(coords start, const coords &end)
+static coords rotAnglesXYZ(coords start, const coords& end)
 {
 	coords angle;
 	// GDML appears to do xyz rotation order for boolean solids
@@ -1313,7 +1324,7 @@ static coords rotAnglesXYZ(coords start, const coords &end)
 		if (end.x < 0.0)
 			endx = -endx; // Choose smaller angle to end.x
 	}
-	
+
 	// For the y rotation, need to position vector for the final z rotation
 	// In the z rotation, distance from the z axis (d^2 = y^2 + x^2) stays constant, so
 	// need to find x before z rotation that will start at this constant distance,
@@ -1401,46 +1412,46 @@ int _tmain(int argc, _TCHAR* argv[])
 
 /*
 static int getFileName() {
-	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED |
-		COINIT_DISABLE_OLE1DDE);
-	if (SUCCEEDED(hr))
-	{
-		IFileOpenDialog *pFileOpen;
+HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED |
+COINIT_DISABLE_OLE1DDE);
+if (SUCCEEDED(hr))
+{
+IFileOpenDialog *pFileOpen;
 
-		// Create the FileOpenDialog object.
-		hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
-			IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+// Create the FileOpenDialog object.
+hr = CoCreateInstance(CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
+IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
 
-		if (SUCCEEDED(hr))
-		{
-			// Show the Open dialog box.
-			pFileOpen->Show(0);
-			hr = pFileOpen->Show(NULL);
+if (SUCCEEDED(hr))
+{
+// Show the Open dialog box.
+pFileOpen->Show(0);
+hr = pFileOpen->Show(NULL);
 
-			// Get the file name from the dialog box.
-			if (SUCCEEDED(hr))
-			{
-				IShellItem *pItem;
-				hr = pFileOpen->GetResult(&pItem);
-				if (SUCCEEDED(hr))
-				{
-					PWSTR pszFilePath;
-					hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+// Get the file name from the dialog box.
+if (SUCCEEDED(hr))
+{
+IShellItem *pItem;
+hr = pFileOpen->GetResult(&pItem);
+if (SUCCEEDED(hr))
+{
+PWSTR pszFilePath;
+hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
 
-					// Display the file name to the user.
-					if (SUCCEEDED(hr))
-					{
-						MessageBox(NULL, pszFilePath, L"File Path", MB_OK);
-						CoTaskMemFree(pszFilePath);
-					}
-					pItem->Release();
-				}
-			}
-			pFileOpen->Release();
-		}
-		CoUninitialize();
-	}
-	return 0;
+// Display the file name to the user.
+if (SUCCEEDED(hr))
+{
+MessageBox(NULL, pszFilePath, L"File Path", MB_OK);
+CoTaskMemFree(pszFilePath);
+}
+pItem->Release();
+}
+}
+pFileOpen->Release();
+}
+CoUninitialize();
+}
+return 0;
 }
 */
 
@@ -1477,8 +1488,8 @@ void OpenAssembly(ISldWorks* swApp, IModelDoc2** swModel)
 	ZeroMemory(szFileName, sizeof(szFileName));
 
 	ofn.lStructSize = sizeof(ofn); // SEE NOTE BELOW
-	// ofn.hwndOwner = hwnd;
-	// ofn.lpstrFilter = "Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
+								   // ofn.hwndOwner = hwnd;
+								   // ofn.lpstrFilter = "Text Files (*.txt)\0*.txt\0All Files (*.*)\0*.*\0";
 	ofn.lpstrFile = szFileName;
 	ofn.nMaxFile = MAX_PATH;
 	ofn.Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY;
@@ -1495,10 +1506,10 @@ void OpenAssembly(ISldWorks* swApp, IModelDoc2** swModel)
 }
 
 
-static void setPlaneSurf(GenericSurf **surf, surfTypeIDs newType) {
-	GenericSurf *surfPtr = *surf;
+static void setPlaneSurf(GenericSurf** surf, surfTypeIDs newType) {
+	GenericSurf* surfPtr = *surf;
 	if (newType != surfPtr->getSubType() && surfPtr->surfID == PLANE_ID) {
-		GenericSurf *tmpPtr = NULL;
+		GenericSurf* tmpPtr = NULL;
 		switch (newType) {
 		case BOARD_ID:
 			tmpPtr = new BoardSurf(*surfPtr);
@@ -1506,7 +1517,7 @@ static void setPlaneSurf(GenericSurf **surf, surfTypeIDs newType) {
 		case DISK_ID:
 			tmpPtr = new DiskSurf(*surfPtr);
 			{ // Need block for local variable oldBoard in switch
-				BoardSurf *oldBoard = surfPtr->boardPtr();
+				BoardSurf* oldBoard = surfPtr->boardPtr();
 				// Transfer values from old to new
 				if (tmpPtr != NULL && oldBoard != NULL) {
 					double circumf = oldBoard->length;
@@ -1534,7 +1545,7 @@ static void setPlaneSurf(GenericSurf **surf, surfTypeIDs newType) {
 
 
 void AssemblyInfo::findTorusCenter() {
-	TorusSurf *theTorus = surfArray[surfArrayInd]->torusPtr();
+	TorusSurf* theTorus = surfArray[surfArrayInd]->torusPtr();
 	// Expecting two circular faces of partial torus
 	if (theTorus != NULL && surfArray[surfArrayInd]->axisList.size() == 2 && surfArray[surfArrayInd]->axisPts.size() == 2) {
 		coords radVec1 = crossProd(surfArray[surfArrayInd]->axis, surfArray[surfArrayInd]->axisList[0]);
@@ -1576,7 +1587,7 @@ void AssemblyInfo::findTorusCenter() {
 }
 
 
-void AssemblyInfo::calcmeasure(CComPtr<IMeasure> &mymeasure, VARIANT &oneface, double radius, long surfID, double &length)
+void AssemblyInfo::calcmeasure(CComPtr<IMeasure>& mymeasure, VARIANT& oneface, double radius, long surfID, double& length)
 {
 	hres = mymeasure->Calculate(oneface, &retVal);
 	if (hres == S_OK && retVal) {
@@ -1644,7 +1655,7 @@ void AssemblyInfo::calcmeasure(CComPtr<IMeasure> &mymeasure, VARIANT &oneface, d
 					}
 				}
 				else if (surfID == PLANE_ID) {
-					switch(surfArray[surfArrayInd]->getSubType()) {
+					switch (surfArray[surfArrayInd]->getSubType()) {
 					case DISK_ID:
 						if ((diskList.shapeInds.empty() || diskList.shapeInds.back() != surfArrayInd)) {
 							diskList.shapeInds.push_back(surfArrayInd);
@@ -1664,12 +1675,12 @@ void AssemblyInfo::calcmeasure(CComPtr<IMeasure> &mymeasure, VARIANT &oneface, d
 			}
 			else if (surfID == PLANE_ID && surfArray[surfArrayInd]->getSubType() == BOARD_ID &&
 				boardList.shapeInds.empty() == false && boardList.shapeInds.back() == surfArrayInd) {
-					boardList.shapeInds.pop_back();
-					cout << "Removed surf index = " << surfArrayInd << " because it has inconsistent size" << endl;
-					cout << "Board list size is now " << boardList.shapeInds.size() << endl;
-					if (boardList.shapeInds.empty() == false) {
-						cout << "Last board is now " << boardList.shapeInds.back() << endl;
-					}
+				boardList.shapeInds.pop_back();
+				cout << "Removed surf index = " << surfArrayInd << " because it has inconsistent size" << endl;
+				cout << "Board list size is now " << boardList.shapeInds.size() << endl;
+				if (boardList.shapeInds.empty() == false) {
+					cout << "Last board is now " << boardList.shapeInds.back() << endl;
+				}
 			}
 			if (hres == S_OK && val > 0) {
 				cout << "perimeter [m] " << val << endl;
@@ -1678,7 +1689,7 @@ void AssemblyInfo::calcmeasure(CComPtr<IMeasure> &mymeasure, VARIANT &oneface, d
 				if (radius >= 0) {
 					radius2 = (val / (2.0 * M_PI)) - radius;
 					double lgRad = radius2;
-					if (lgRad < radius){
+					if (lgRad < radius) {
 						lgRad = radius;
 						radius = radius2; // Make sure "radius" is the smaller value
 					}
@@ -1708,12 +1719,12 @@ void AssemblyInfo::calcmeasure(CComPtr<IMeasure> &mymeasure, VARIANT &oneface, d
 }
 
 
-static double *varDblArrayAccess(VARIANT &paramInfo, long &paramBegin, long &paramLim)
+static double* varDblArrayAccess(VARIANT& paramInfo, long& paramBegin, long& paramLim)
 {
 	if (paramInfo.pparray != NULL) {
-		SAFEARRAY *psaparamInfo = V_ARRAY(&paramInfo);
-		double *pParamDblArray = NULL;
-		hres = SafeArrayAccessData(psaparamInfo, (void **)&pParamDblArray);
+		SAFEARRAY* psaparamInfo = V_ARRAY(&paramInfo);
+		double* pParamDblArray = NULL;
+		hres = SafeArrayAccessData(psaparamInfo, (void**)&pParamDblArray);
 		if (hres == S_OK && pParamDblArray != NULL) {
 			paramBegin = paramLim = -1;
 			hres = SafeArrayGetLBound(psaparamInfo, 1, &paramBegin);
@@ -1726,7 +1737,7 @@ static double *varDblArrayAccess(VARIANT &paramInfo, long &paramBegin, long &par
 }
 
 
-double GenericSurf::showSurfParams(AssemblyInfo *assembly)
+double GenericSurf::showSurfParams(AssemblyInfo* assembly)
 {
 	double radius = 0.0;
 	if (boolFunc(&retVal, surfPtr) == S_OK && retVal) {
@@ -1734,9 +1745,9 @@ double GenericSurf::showSurfParams(AssemblyInfo *assembly)
 		VariantInit(&paramInfo);
 		hres = getParams(&paramInfo, surfPtr);  // variant
 		if (hres == S_OK && paramInfo.pparray != NULL) {
-			SAFEARRAY *psaparamInfo = V_ARRAY(&paramInfo);
-			double *pParamDblArray = NULL;
-			hres = SafeArrayAccessData(psaparamInfo, (void **)&pParamDblArray);
+			SAFEARRAY* psaparamInfo = V_ARRAY(&paramInfo);
+			double* pParamDblArray = NULL;
+			hres = SafeArrayAccessData(psaparamInfo, (void**)&pParamDblArray);
 			if (hres == S_OK && pParamDblArray != NULL) {
 				long paramBegin = -1, paramLim = -1;
 				hres = SafeArrayGetLBound(psaparamInfo, 1, &paramBegin);
@@ -1768,20 +1779,20 @@ double GenericSurf::showSurfParams(AssemblyInfo *assembly)
 		VariantInit(&point);
 		hres = surfPtr->GetClosestPointOn(1.0, 1.0, 1.0, &point);
 		long paramBegin, paramLim;
-		double *ptarray = varDblArrayAccess(point, paramBegin, paramLim);
+		double* ptarray = varDblArrayAccess(point, paramBegin, paramLim);
 		if (ptarray != NULL)
 			for (int index = paramBegin; index <= paramLim; ++index) {
-			double val = ptarray[index];
-			if (fabs(val) < 0.00001)
-				val = 0.0;
-			if (index == paramBegin)
-				cout << "closest point value? for (1,1,1) (" << val << ", ";
-			else if (index == paramBegin + 1)
-				cout << val << ", ";
-			else if (index == paramBegin + 2 || index == paramBegin + 4)
-				cout << val << ")" << endl;
-			else if (index == paramBegin + 3)
-				cout << "u,v (" << val << ", ";
+				double val = ptarray[index];
+				if (fabs(val) < 0.00001)
+					val = 0.0;
+				if (index == paramBegin)
+					cout << "closest point value? for (1,1,1) (" << val << ", ";
+				else if (index == paramBegin + 1)
+					cout << val << ", ";
+				else if (index == paramBegin + 2 || index == paramBegin + 4)
+					cout << val << ")" << endl;
+				else if (index == paramBegin + 3)
+					cout << "u,v (" << val << ", ";
 			}
 	}
 	return (radius);
@@ -1847,7 +1858,7 @@ static void chkCurve(CComPtr<ICurve> curveptr) {
 
 
 coords AssemblyInfo::getbcurve(CComPtr<ICurve> curveptr) {
-	VARIANT_BOOL cubic = true, irrational = false, 
+	VARIANT_BOOL cubic = true, irrational = false,
 		nonperiodic = false, closed = true;
 	CComPtr<ISplineParamData> params;
 	coords goodCenter(9999, 9999, 9999);
@@ -1864,8 +1875,8 @@ coords AssemblyInfo::getbcurve(CComPtr<ICurve> curveptr) {
 			VariantInit(&controlPts);
 			hres = params->GetControlPoints(&controlPts, &retVal);
 			if (hres == S_OK && retVal) {
-				SAFEARRAY *ptsView = V_ARRAY(&controlPts);
-				double *ptsptr = NULL;
+				SAFEARRAY* ptsView = V_ARRAY(&controlPts);
+				double* ptsptr = NULL;
 				long lStartBound = 0;
 				long lEndBound = 0;
 				SafeArrayGetLBound(ptsView, 1, &lStartBound);
@@ -1887,7 +1898,7 @@ coords AssemblyInfo::getbcurve(CComPtr<ICurve> curveptr) {
 								quarterPt = pt;
 						}
 					}
-					double factor = (double) dimen / (lEndBound - lStartBound + 1.0);
+					double factor = (double)dimen / (lEndBound - lStartBound + 1.0);
 					center = center * factor;
 					cout << "Center pt " << center << endl;
 					if (surfArray[surfArrayInd]->axis.length() == 0 && (surfArray[surfArrayInd]->surfID == BSURF_ID || surfArray[surfArrayInd]->surfID == OFFSET_ID)) {
@@ -1916,13 +1927,13 @@ coords AssemblyInfo::getbcurve(CComPtr<ICurve> curveptr) {
 }
 
 
-bool AssemblyInfo::getLineInfo(CComPtr<ICurve> curveptr, sideInfo &thisSide) {
+bool AssemblyInfo::getLineInfo(CComPtr<ICurve> curveptr, sideInfo& thisSide) {
 	VARIANT lineParams;
 	VariantInit(&lineParams);
 	hres = curveptr->get_LineParams(&lineParams);
 	if (hres == S_OK) {
 		long paramBegin, paramLim;
-		double *paramArray = varDblArrayAccess(lineParams, paramBegin, paramLim);
+		double* paramArray = varDblArrayAccess(lineParams, paramBegin, paramLim);
 		if (paramLim - paramBegin >= 5) {
 			coords lineRoot(paramArray[paramBegin], paramArray[paramBegin + 1], paramArray[paramBegin + 2]);
 			coords lineDir(paramArray[paramBegin + 3], paramArray[paramBegin + 4], paramArray[paramBegin + 5]);
@@ -1969,22 +1980,22 @@ closestPt = calcVecOnAxis(surfArray[surfArrayInd]->axis, closestPt);
 if (iIndex == lStartBound)
 surfArray[surfArrayInd]->position = closestPt;
 else if (closestPt.length() < surfArray[surfArrayInd]->position.length()) {
-	prevPt = surfArray[surfArrayInd]->position;
-	surfArray[surfArrayInd]->position = closestPt;
+prevPt = surfArray[surfArrayInd]->position;
+surfArray[surfArrayInd]->position = closestPt;
 }
 else prevPt = closestPt;
-					} // end if not null
-					*/
+} // end if not null
+*/
 
 
-static SAFEARRAY *assignvararray(int facetype, LPDISPATCH *srcptr, int srcindex, int size = 1)
+static SAFEARRAY* assignvararray(int facetype, LPDISPATCH* srcptr, int srcindex, int size = 1)
 {
-	SAFEARRAY *cparray = NULL;
+	SAFEARRAY* cparray = NULL;
 	SAFEARRAYBOUND aDim[1];
 	aDim[0].lLbound = 0;
 	aDim[0].cElements = size;
 	cparray = SafeArrayCreate(facetype, 1, aDim);
-	LPDISPATCH *dspptr = NULL;
+	LPDISPATCH* dspptr = NULL;
 	hres = SafeArrayAccessData(cparray, (void**)&dspptr);
 	if (hres == S_OK && dspptr && srcptr) {
 		dspptr[0] = srcptr[srcindex];
@@ -1995,7 +2006,7 @@ static SAFEARRAY *assignvararray(int facetype, LPDISPATCH *srcptr, int srcindex,
 }
 
 
-static coords findCenter(const vector<sideInfo> &sideList) {
+static coords findCenter(const vector<sideInfo>& sideList) {
 	coords center;
 	// std::cout << " Candidate points are ";
 	for (int ind = 0; ind < 4; ++ind) {
@@ -2009,7 +2020,7 @@ static coords findCenter(const vector<sideInfo> &sideList) {
 
 
 // Note that "side" may get its lineDir changed
-static coords getBoxVertex(sideInfo &side, const coords &approxCenter) {
+static coords getBoxVertex(sideInfo& side, const coords& approxCenter) {
 	coords chkDir = approxCenter - side.point;
 	if (dotProd(chkDir, side.lineDir) < 0)	// If lineDir pointing away from center
 		side.lineDir = side.lineDir * -1.0;		// Reverse it
@@ -2019,10 +2030,10 @@ static coords getBoxVertex(sideInfo &side, const coords &approxCenter) {
 }
 
 
-void AssemblyInfo::calcMateDisplace(const coords &posNoDispl)
+void AssemblyInfo::calcMateDisplace(const coords& posNoDispl)
 {
 	if (mateInfo.faceRot == false) { // overallRot has been calculated
-		// Apply mate rotation
+									 // Apply mate rotation
 		coords posRot = rotVecZYX(posNoDispl, mateInfo.overallRot);
 		// Calc mate displacement from difference of final pos and rotated position
 		mateInfo.displace = mateInfo.displpos - posRot;
@@ -2043,12 +2054,12 @@ void AssemblyInfo::calcMateDisplace(const coords &posNoDispl)
 }
 
 
-void AssemblyInfo::checkMateRot(const coords &normal)
+void AssemblyInfo::checkMateRot(const coords& normal)
 {
 	if (mateInfo.faceRot && surfArray[surfArrayInd]->facePtr == mateInfo.faceptr) // Check for mate for this face
 	{
 		if (normal != mateInfo.displdir && normal != (mateInfo.displdir * -1.0)) { // Ignore reflections
-			// Rotate normal to displdir to get overallRot, then reset all previous rots like above
+																				   // Rotate normal to displdir to get overallRot, then reset all previous rots like above
 			mateInfo.overallRot = rotAnglesZYX(normal, mateInfo.displdir);
 			cout << "Using faces for overall rotation set to = " << mateInfo.overallRot << endl;
 			for (int ind = mateInfo.startIndex + 1; ind <= surfArrayInd; ++ind) {
@@ -2067,7 +2078,7 @@ void AssemblyInfo::checkMateRot(const coords &normal)
 
 void AssemblyInfo::calcBoard() {
 	// Only considered four-sided boards for now
-	BoardSurf *boardptr = surfArray[surfArrayInd]->boardPtr();
+	BoardSurf* boardptr = surfArray[surfArrayInd]->boardPtr();
 	if (surfArray[surfArrayInd]->sideList.size() == 4 && boardptr != NULL) {
 		// double longSide = boardptr->length, width = boardptr->width;
 		// double hypotenuse = sqrt(longSide * longSide + width * width);
@@ -2139,7 +2150,7 @@ void AssemblyInfo::calcBoard() {
 		cout << "approx center " << approxCenter << " center1 " << center1 << " center2 " << center2 << endl;
 		coords dist1 = center1 - approxCenter;
 		coords dist2 = center2 - approxCenter;
-		vector<sideInfo> &goodList = sideLists[0];
+		vector<sideInfo>& goodList = sideLists[0];
 		cout << "distance 1, distance 2 = " << dist1.length() << " " << dist2.length() << endl;
 		// Don't trust side list that includes origin because it seems to be missing position info
 		if ((hasorigin[0] && hasorigin[1] == false) || dist1.length() > dist2.length())
@@ -2174,12 +2185,12 @@ void AssemblyInfo::calcBoard() {
 	}
 }
 
-static HRESULT getEdgeClosestPt(IEdge *const edgeptr, const coords &testpt, coords &closestPt) {
+static HRESULT getEdgeClosestPt(IEdge* const edgeptr, const coords& testpt, coords& closestPt) {
 	VARIANT point;
 	VariantInit(&point);
 	hres = edgeptr->GetClosestPointOn(testpt.x, testpt.y, testpt.z, &point);
 	long paramBegin, paramLim;
-	double *ptarray = varDblArrayAccess(point, paramBegin, paramLim);
+	double* ptarray = varDblArrayAccess(point, paramBegin, paramLim);
 	if (ptarray != NULL) {
 		for (int index = paramBegin; index <= paramLim; ++index) {
 			double val = ptarray[index];
@@ -2198,7 +2209,7 @@ static HRESULT getEdgeClosestPt(IEdge *const edgeptr, const coords &testpt, coor
 				closestPt.z = val;
 			}
 			// else if (index == paramBegin + 3)
-				// cout << "u = " << val << "\n";
+			// cout << "u = " << val << "\n";
 		} // end for xyzu
 		return (S_OK);
 	}
@@ -2210,7 +2221,7 @@ static HRESULT getEdgeClosestPt(IEdge *const edgeptr, const coords &testpt, coor
 // choose the one pointing along.
 // If both sides give same dot product with stdAxis, return false because we need to check another axis.
 // Returns true if startSide and endSide are correct (note they may get exchanged).
-static bool cmpWithStdAxis(const coords &stdAxis, coords &startSide, coords &endSide) {
+static bool cmpWithStdAxis(const coords& stdAxis, coords& startSide, coords& endSide) {
 	double startVal = dotProd(stdAxis, startSide);
 	double endVal = dotProd(stdAxis, endSide);
 	if (dblgt(fabs(endVal), fabs(startVal)) ||
@@ -2225,11 +2236,11 @@ static bool cmpWithStdAxis(const coords &stdAxis, coords &startSide, coords &end
 }
 
 
-void AssemblyInfo::resetAxis(const coords &center, const coords &startVertex, const coords &endVertex) {
+void AssemblyInfo::resetAxis(const coords& center, const coords& startVertex, const coords& endVertex) {
 	coords startSide = startVertex - center;
 	coords endSide = endVertex - center;
 	if (cmpWithStdAxis(xaxis, startSide, endSide) == false && cmpWithStdAxis(yaxis, startSide, endSide) == false)
-		(void) cmpWithStdAxis(zaxis, startSide, endSide);
+		(void)cmpWithStdAxis(zaxis, startSide, endSide);
 	coords goodAxis = crossProd(startSide, endSide);
 	cout << "Comparing current axis with calculated good axis direction " << surfArray[surfArrayInd]->axis << " " << goodAxis << endl;
 	if (dotProd(goodAxis, surfArray[surfArrayInd]->axis) < 0.0)	// Current axis points wrong way
@@ -2237,8 +2248,8 @@ void AssemblyInfo::resetAxis(const coords &center, const coords &startVertex, co
 }
 
 
-coords AssemblyInfo::choseStartAxis(const coords &center, const coords &axis, const coords &normal,
-	const coords &startVertex, const coords &endVertex, coords &endAxis) {
+coords AssemblyInfo::choseStartAxis(const coords& center, const coords& axis, const coords& normal,
+	const coords& startVertex, const coords& endVertex, coords& endAxis) {
 	// Have to choose which end of radVec corresponds to right hand rule
 	const coords radVec = endVertex - startVertex;
 	coords chkAxis = crossProd(radVec, normal);
@@ -2258,7 +2269,7 @@ coords AssemblyInfo::choseStartAxis(const coords &center, const coords &axis, co
 
 
 // Start axis is chosen to be most parallel to a standard axis and for start-to-end to match right hand rule
-coords AssemblyInfo::getStartAxis(IEdge *const edgeptr, const coords &center, const coords &axis, double circRad, coords &endAxis) {
+coords AssemblyInfo::getStartAxis(IEdge* const edgeptr, const coords& center, const coords& axis, double circRad, coords& endAxis) {
 	CComPtr<IVertex> startvertexptr;
 	hres = edgeptr->IGetStartVertex(&startvertexptr);
 	if (hres == S_OK && startvertexptr) {
@@ -2267,7 +2278,7 @@ coords AssemblyInfo::getStartAxis(IEdge *const edgeptr, const coords &center, co
 		hres = startvertexptr->GetPoint(&startPt);
 		if (hres == S_OK) {
 			long paramBegin, paramLim;
-			double *ptarray = varDblArrayAccess(startPt, paramBegin, paramLim);
+			double* ptarray = varDblArrayAccess(startPt, paramBegin, paramLim);
 			long numParams = paramLim - paramBegin + 1;
 			if (ptarray != NULL && numParams >= 3) {
 				coords startVertex(ptarray[0], ptarray[1], ptarray[2]);
@@ -2279,7 +2290,7 @@ coords AssemblyInfo::getStartAxis(IEdge *const edgeptr, const coords &center, co
 					hres = endvertexptr->GetPoint(&endPt);
 					if (hres == S_OK) {
 						long endParamBegin, endParamLim;
-						double *endptarray = varDblArrayAccess(endPt, endParamBegin, endParamLim);
+						double* endptarray = varDblArrayAccess(endPt, endParamBegin, endParamLim);
 						long numEndParams = endParamLim - endParamBegin + 1;
 						if (endptarray != NULL && numEndParams >= 3) {
 							coords endVertex(endptarray[0], endptarray[1], endptarray[2]);
@@ -2314,7 +2325,8 @@ coords AssemblyInfo::getStartAxis(IEdge *const edgeptr, const coords &center, co
 				else cout << "Failed to get end vertex\n";
 			} // end if start ptarray != NULL
 		} // end if got startVertex
-	} else cout << "Failed to get start vertex\n";
+	}
+	else cout << "Failed to get start vertex\n";
 	coords badAxis;
 	return (badAxis);
 }
@@ -2322,7 +2334,7 @@ coords AssemblyInfo::getStartAxis(IEdge *const edgeptr, const coords &center, co
 
 void AssemblyInfo::chkEllipAxis()
 {
-	EllipsoidSurf *ellip = surfArray[surfArrayInd]->ellipsoidPtr();
+	EllipsoidSurf* ellip = surfArray[surfArrayInd]->ellipsoidPtr();
 	if (ellip != NULL) {
 		// double testLen = ellip->cz * 1.1;
 		coords testVec = surfArray[surfArrayInd]->axis * ellip->cz;
@@ -2331,7 +2343,7 @@ void AssemblyInfo::chkEllipAxis()
 		VariantInit(&point);
 		hres = surfArray[surfArrayInd]->facePtr->GetClosestPointOn(testPt.x, testPt.y, testPt.z, &point);
 		long paramBegin, paramLim;
-		double *ptarray = varDblArrayAccess(point, paramBegin, paramLim);
+		double* ptarray = varDblArrayAccess(point, paramBegin, paramLim);
 		if (ptarray != NULL && paramLim - paramBegin >= 2) {
 			coords facePt(ptarray[paramBegin], ptarray[paramBegin + 1], ptarray[paramBegin + 2]);
 			coords farPt = surfArray[surfArrayInd]->position - testVec;
@@ -2347,14 +2359,14 @@ void AssemblyInfo::chkEllipAxis()
 }
 
 
-void AssemblyInfo::getEdgeDist(IFace2 *const faceptr, CComPtr<IMeasure> &mymeasure, long surfID, double radius)
+void AssemblyInfo::getEdgeDist(IFace2* const faceptr, CComPtr<IMeasure>& mymeasure, long surfID, double radius)
 {
 	VARIANT edgearray;
 	VariantInit(&edgearray);
 	hres = faceptr->GetEdges(&edgearray);
 	if (hres == S_OK) {
-		SAFEARRAY *edgesview = V_ARRAY(&edgearray);
-		LPDISPATCH *srcptr = NULL;
+		SAFEARRAY* edgesview = V_ARRAY(&edgearray);
+		LPDISPATCH* srcptr = NULL;
 		long lStartBound = 0;
 		long lEndBound = 0;
 		SafeArrayGetLBound(edgesview, 1, &lStartBound);
@@ -2373,7 +2385,7 @@ void AssemblyInfo::getEdgeDist(IFace2 *const faceptr, CComPtr<IMeasure> &mymeasu
 				if (oneEdge.parray != NULL) {
 					calcmeasure(mymeasure, oneEdge, radius, surfID, sideLen);
 				}
-				IEdge *edgeptr = NULL;
+				IEdge* edgeptr = NULL;
 				hres = (srcptr[iIndex])->QueryInterface(__uuidof(IEdge), reinterpret_cast<void**>(&edgeptr));
 				if (hres == S_OK && edgeptr) {
 					CComPtr<ICurve> curveptr;
@@ -2409,7 +2421,7 @@ void AssemblyInfo::getEdgeDist(IFace2 *const faceptr, CComPtr<IMeasure> &mymeasu
 							hres = curveptr->get_CircleParams(&circleParams);
 							if (hres == S_OK) {
 								long paramBegin, paramLim;
-								double *paramArray = varDblArrayAccess(circleParams, paramBegin, paramLim);
+								double* paramArray = varDblArrayAccess(circleParams, paramBegin, paramLim);
 								if (paramLim - paramBegin >= 6) {
 									coords center(paramArray[paramBegin], paramArray[paramBegin + 1], paramArray[paramBegin + 2]);
 									coords axis(paramArray[paramBegin + 3], paramArray[paramBegin + 4], paramArray[paramBegin + 5], true);
@@ -2430,13 +2442,13 @@ void AssemblyInfo::getEdgeDist(IFace2 *const faceptr, CComPtr<IMeasure> &mymeasu
 									cout << "Circle radius = " << circRad << "; axis " << axis << endl;
 									if (surfArray[surfArrayInd]->getAngle() < 2.0 * M_PI && surfArray[surfArrayInd]->startAxis.length() == 0)
 										surfArray[surfArrayInd]->startAxis = getStartAxis(edgeptr, center, surfArray[surfArrayInd]->axis,
-										circRad, surfArray[surfArrayInd]->endAxis);
+											circRad, surfArray[surfArrayInd]->endAxis);
 									closestPt = center;
 									// Circular edge indicates a disk if the surface is a plane
 									if (surfArray[surfArrayInd]->surfID == PLANE_ID) {
 										setPlaneSurf(&(surfArray[surfArrayInd]), DISK_ID);
 										if (surfArray[surfArrayInd]->setSize(circRad, 0, 0, 0, 0, 0) &&
-												(diskList.shapeInds.empty() || diskList.shapeInds.back() != surfArrayInd)) {
+											(diskList.shapeInds.empty() || diskList.shapeInds.back() != surfArrayInd)) {
 											diskList.shapeInds.push_back(surfArrayInd);
 											cout << "Found disk surf index = " << std::dec << surfArrayInd << endl;
 										}
@@ -2485,7 +2497,7 @@ void AssemblyInfo::getEdgeDist(IFace2 *const faceptr, CComPtr<IMeasure> &mymeasu
 				cout << "Possibly choosing new axis among options: " << surfArray[surfArrayInd]->axis << "\n";
 				double coneLen = sqrt(fabs(dotProd(surfArray[surfArrayInd]->axis, closeToAxiswLen)));
 				cout << "Calculated center-to-center cone length = " << coneLen << endl;
-				(void) surfArray[surfArrayInd]->setSize(-1, 0, 0, 0, 0, coneLen);	// Override cone len
+				(void)surfArray[surfArrayInd]->setSize(-1, 0, 0, 0, 0, coneLen);	// Override cone len
 			}
 			if (surfID != PLANE_ID && prevPtSet) {
 				coords bodyVec = prevPt - surfArray[surfArrayInd]->position;	// Vector into body of part
@@ -2508,7 +2520,7 @@ void AssemblyInfo::getEdgeDist(IFace2 *const faceptr, CComPtr<IMeasure> &mymeasu
 
 
 
-GenericSurf *makeSurface(ISurface *swSurf, long *surfID)
+GenericSurf* makeSurface(ISurface* swSurf, long* surfID)
 // surfID is assumed to be initialized to -1.
 {
 	if (swSurf)
@@ -2546,78 +2558,78 @@ GenericSurf *makeSurface(ISurface *swSurf, long *surfID)
 }
 
 
-const char *GenericSurf::surfName()
+const char* GenericSurf::surfName()
 {
 	long index = surfID;
 	index -= 4001;
-	if (index >= 0 && index < (sizeof(surftypes) / sizeof(char *)))
+	if (index >= 0 && index < (sizeof(surftypes) / sizeof(char*)))
 		return (surftypes[index]);
 	else return ("null name");
 }
 
 
 
-void AssemblyInfo::showFaceDetails(LPDISPATCH *srcptr, int srcindex, double *radius, long *surfID, CComPtr<IMeasure> &mymeasure)
+void AssemblyInfo::showFaceDetails(LPDISPATCH* srcptr, int srcindex, double* radius, long* surfID, CComPtr<IMeasure>& mymeasure)
 {
-		IFace2 *faceptr = NULL;
-		hres = (srcptr[srcindex])->QueryInterface(__uuidof(IFace2), reinterpret_cast<void**>(&faceptr));
-		if (hres == S_OK && faceptr) {
-			cout << "\n face num " << std::dec << srcindex << endl;
-			struct IDispatch *pSurfDisp;
-			ISurface *swSurf = NULL;
-			hres = faceptr->GetSurface(&pSurfDisp);
-			if (hres == S_OK && pSurfDisp) {
-				hres = pSurfDisp->QueryInterface(__uuidof(ISurface), reinterpret_cast<void**>(&swSurf));
-				if (hres == S_OK && swSurf) {
-					surfArray.push_back(makeSurface(swSurf, surfID));
-					++surfArrayInd;
-					cout << "surf name is " << surfArray[surfArrayInd]->surfName() << endl;
-					surfArray[surfArrayInd]->facePtr = faceptr;
-					*radius = surfArray[surfArrayInd]->showSurfParams(this);
-					surfArray[surfArrayInd]->displace = mateInfo.displace;
-					cout << "Setting index " << surfArrayInd << " to displace " << mateInfo.displace << endl;
-					if (mateInfo.overallRotCmpNmStr.size() == 0 || mateInfo.overallRotCmpNmStr.compare(compNameStr) == 0){
-						surfArray[surfArrayInd]->overallRot = mateInfo.overallRot;
-						surfArray[surfArrayInd]->overallRotMatrix = mateInfo.rotMatrix;
-					}
-					else {
-						cout << "Skipping overallRot because of comp name mismatch" << endl;
-						cout << "Rotat comp name " << mateInfo.overallRotCmpNmStr << ", current comp name " << compNameStr << endl;
-					}
-					surfArray[surfArrayInd]->matNameStr = matNameStr;
-					surfArray[surfArrayInd]->compNameStr = compNameStr;
-					surfArray[surfArrayInd]->pathNameStr = pathNameStr; 
-					surfArray[surfArrayInd]->featureTypeStr = featureTypeStr;
+	IFace2* faceptr = NULL;
+	hres = (srcptr[srcindex])->QueryInterface(__uuidof(IFace2), reinterpret_cast<void**>(&faceptr));
+	if (hres == S_OK && faceptr) {
+		cout << "\n face num " << std::dec << srcindex << endl;
+		struct IDispatch* pSurfDisp;
+		ISurface* swSurf = NULL;
+		hres = faceptr->GetSurface(&pSurfDisp);
+		if (hres == S_OK && pSurfDisp) {
+			hres = pSurfDisp->QueryInterface(__uuidof(ISurface), reinterpret_cast<void**>(&swSurf));
+			if (hres == S_OK && swSurf) {
+				surfArray.push_back(makeSurface(swSurf, surfID));
+				++surfArrayInd;
+				cout << "surf name is " << surfArray[surfArrayInd]->surfName() << endl;
+				surfArray[surfArrayInd]->facePtr = faceptr;
+				*radius = surfArray[surfArrayInd]->showSurfParams(this);
+				surfArray[surfArrayInd]->displace = mateInfo.displace;
+				cout << "Setting index " << surfArrayInd << " to displace " << mateInfo.displace << endl;
+				if (mateInfo.overallRotCmpNmStr.size() == 0 || mateInfo.overallRotCmpNmStr.compare(compNameStr) == 0) {
+					surfArray[surfArrayInd]->overallRot = mateInfo.overallRot;
+					surfArray[surfArrayInd]->overallRotMatrix = mateInfo.rotMatrix;
 				}
-				else cout << "can't convert surf h ptr " << std::hex << hres << " " << swSurf << endl;
-				pSurfDisp->Release();
-			}
-			else cout << "can't get surf h dptr " << std::hex << hres << " " << pSurfDisp << endl;
-			long cnt = -1;
-			hres = faceptr->GetEdgeCount(&cnt);
-			if (hres == S_OK) {
-				cout << "edge cnt " << cnt << endl;
-				if (cnt > 0)
-					getEdgeDist(faceptr, mymeasure, *surfID, *radius);
-			}
-			/*
-			IFeature *faceFeature = NULL;
-			hres = faceptr->IGetFeature(&faceFeature);
-			if (hres == S_OK && faceFeature) {
-				CComBSTR sGetFeatureName;
-				hres = faceFeature->get_Name(&sGetFeatureName);
-				if (hres == S_OK && sGetFeatureName) {
-					CW2A featurenam(sGetFeatureName);
-					cout << " **** face feature name " << featurenam << endl;
+				else {
+					cout << "Skipping overallRot because of comp name mismatch" << endl;
+					cout << "Rotat comp name " << mateInfo.overallRotCmpNmStr << ", current comp name " << compNameStr << endl;
 				}
+				surfArray[surfArrayInd]->matNameStr = matNameStr;
+				surfArray[surfArrayInd]->compNameStr = compNameStr;
+				surfArray[surfArrayInd]->pathNameStr = pathNameStr;
+				surfArray[surfArrayInd]->featureTypeStr = featureTypeStr;
 			}
-			else cout << "Couldn't get face feature hres ptr = " << hres << " " << faceFeature << endl;
-			*/
+			else cout << "can't convert surf h ptr " << std::hex << hres << " " << swSurf << endl;
+			pSurfDisp->Release();
 		}
+		else cout << "can't get surf h dptr " << std::hex << hres << " " << pSurfDisp << endl;
+		long cnt = -1;
+		hres = faceptr->GetEdgeCount(&cnt);
+		if (hres == S_OK) {
+			cout << "edge cnt " << cnt << endl;
+			if (cnt > 0)
+				getEdgeDist(faceptr, mymeasure, *surfID, *radius);
+		}
+		/*
+		IFeature *faceFeature = NULL;
+		hres = faceptr->IGetFeature(&faceFeature);
+		if (hres == S_OK && faceFeature) {
+		CComBSTR sGetFeatureName;
+		hres = faceFeature->get_Name(&sGetFeatureName);
+		if (hres == S_OK && sGetFeatureName) {
+		CW2A featurenam(sGetFeatureName);
+		cout << " **** face feature name " << featurenam << endl;
+		}
+		}
+		else cout << "Couldn't get face feature hres ptr = " << hres << " " << faceFeature << endl;
+		*/
+	}
 }
 
 
-static void showDistances(VARIANT &twofaces, CComPtr<IMeasure> &mymeasure)
+static void showDistances(VARIANT& twofaces, CComPtr<IMeasure>& mymeasure)
 {
 	if (mymeasure == NULL) {
 		cout << "bad measure\n";
@@ -2662,36 +2674,36 @@ static void showDistances(VARIANT &twofaces, CComPtr<IMeasure> &mymeasure)
 
 /* leftover example
 if (firstFace) {
-	twofaces.parray = assignvararray(facetype, srcptr, iIndex, 2);
-	firstFace = false;
+twofaces.parray = assignvararray(facetype, srcptr, iIndex, 2);
+firstFace = false;
 }
 else {
-	LPDISPATCH *arrayptr = NULL;
-	hres = SafeArrayAccessData(twofaces.parray, (void**)&arrayptr);
-	if (hres == S_OK && arrayptr && srcptr) {
-		arrayptr[1] = srcptr[iIndex]; // Assign into twofaces
-		// hres = swSelMgr->SuspendSelectionList(&lNumSelections);
-		// cout << "trying to suspend sel list hres numremoved " << std::hex << hres << " " << lNumSelections << endl;
-		// swSelMgr->GetSelectedObjectCount2(-1, &lNumSelections);
-		// cout << "current num selections " << lNumSelections << endl;
-		// hres = swSelMgr->AddSelectionListObjects(twofaces, swSelData, &lNumSelections);
-		// cout << "trying to add two faces to sel hres numadded " << std::hex << hres << " " << lNumSelections << endl;
-		// swSelMgr->GetSelectedObjectCount2(-1, &lNumSelections);
-		// cout << "current num selections " << lNumSelections << endl;
-		// VARIANT nullvar;
-		// VariantInit(&nullvar);
-		// nullvar.vt = VT_NULL;
-		// hres = mymeasure->Calculate(nullvar, &retVal);
-		showDistances(twofaces, mymeasure);
-	}
-	else {
-		cout << "Can't get ptr into 2 faces hres ptr " << std::hex << hres << " " << arrayptr << endl;
-		SafeArrayUnaccessData(twofaces.parray);
-	}
+LPDISPATCH *arrayptr = NULL;
+hres = SafeArrayAccessData(twofaces.parray, (void**)&arrayptr);
+if (hres == S_OK && arrayptr && srcptr) {
+arrayptr[1] = srcptr[iIndex]; // Assign into twofaces
+// hres = swSelMgr->SuspendSelectionList(&lNumSelections);
+// cout << "trying to suspend sel list hres numremoved " << std::hex << hres << " " << lNumSelections << endl;
+// swSelMgr->GetSelectedObjectCount2(-1, &lNumSelections);
+// cout << "current num selections " << lNumSelections << endl;
+// hres = swSelMgr->AddSelectionListObjects(twofaces, swSelData, &lNumSelections);
+// cout << "trying to add two faces to sel hres numadded " << std::hex << hres << " " << lNumSelections << endl;
+// swSelMgr->GetSelectedObjectCount2(-1, &lNumSelections);
+// cout << "current num selections " << lNumSelections << endl;
+// VARIANT nullvar;
+// VariantInit(&nullvar);
+// nullvar.vt = VT_NULL;
+// hres = mymeasure->Calculate(nullvar, &retVal);
+showDistances(twofaces, mymeasure);
+}
+else {
+cout << "Can't get ptr into 2 faces hres ptr " << std::hex << hres << " " << arrayptr << endl;
+SafeArrayUnaccessData(twofaces.parray);
+}
 }
 */
 
-static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH *srcptr, CComPtr<IMeasure> &mymeasure,
+static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH* srcptr, CComPtr<IMeasure>& mymeasure,
 	int facetype)
 {
 	for (int ind = 0; ind < listSz - 1; ++ind)
@@ -2704,7 +2716,7 @@ static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH *srcptr
 		if (twofaces.parray != NULL) {
 			for (int ind2 = ind + 1; ind2 < listSz; ++ind2)
 			{
-				LPDISPATCH *arrayptr = NULL;
+				LPDISPATCH* arrayptr = NULL;
 				hres = SafeArrayAccessData(twofaces.parray, (void**)&arrayptr);
 				if (hres == S_OK && arrayptr && srcptr) {
 					cout << "compared with index " << faceIndList[ind2] << endl;
@@ -2724,9 +2736,9 @@ static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH *srcptr
 
 
 // Assumes cone1 and cone2 are two surfaces of same cone
- string conesList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly)
+string conesList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly)
 {
-	ConeSurf *cone1 = (assembly->surfArray)[ind1]->conePtr(), *cone2 = (assembly->surfArray)[ind2]->conePtr();
+	ConeSurf* cone1 = (assembly->surfArray)[ind1]->conePtr(), * cone2 = (assembly->surfArray)[ind2]->conePtr();
 	if (cone1 != NULL && cone2 != NULL) {
 		double inSmRadius = cone1->smRadius, outSmRadius = cone2->smRadius;
 		double inLgRadius = cone1->lgRadius, outLgRadius = cone2->lgRadius;
@@ -2741,7 +2753,7 @@ static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH *srcptr
 			// Only one surface -- it's a hole
 			inSmRadius = inLgRadius = 0.0;
 		}
-		const char *const name = nameIncr(CONE_ID);
+		const char* const name = nameIncr(CONE_ID);
 		xmlElem beginEnd, attrib1, attrib2;
 		gdmlout << indent1 << beginEnd.openLenElem("cone") << attrib1.attribute("name", name) << attrib2.attribute("z", cone1->height);
 		gdmlout << attrib1.attribute("rmin1", inLgRadius) << attrib2.attribute("rmin2", inSmRadius);
@@ -2756,9 +2768,9 @@ static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH *srcptr
 
 
 // Assumes cyl1 and cyl2 are two surfaces of same cylinder
- string cylinderList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly)
+string cylinderList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly)
 {
-	CylSurf *cyl1 = (assembly->surfArray)[ind1]->cylPtr(), *cyl2 = (assembly->surfArray)[ind2]->cylPtr();
+	CylSurf* cyl1 = (assembly->surfArray)[ind1]->cylPtr(), * cyl2 = (assembly->surfArray)[ind2]->cylPtr();
 	if (cyl1 != NULL && cyl2 != NULL) {
 		double smRadius = cyl1->radius, lgRadius = cyl2->radius;
 		if (lgRadius < smRadius)
@@ -2768,7 +2780,7 @@ static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH *srcptr
 		}
 		if (checkZero(lgRadius - smRadius) == 0) // Only one surface -- it's a hole or solid
 			smRadius = 0;
-		const char *const name = nameIncr(CYLINDER_ID);
+		const char* const name = nameIncr(CYLINDER_ID);
 		xmlElem beginEnd, attrib1, attrib2;
 		gdmlout << indent1 << beginEnd.openLenElem("tube") << attrib1.attribute("name", name) << attrib2.attribute("z", cyl1->length);
 		gdmlout << attrib1.attribute("rmin", smRadius) << attrib2.attribute("rmax", lgRadius);
@@ -2780,101 +2792,101 @@ static void getFaceDistances(int faceIndList[20], int listSz, LPDISPATCH *srcptr
 }
 
 
- string torusesList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly)
- {
-	 TorusSurf *torus1 = (assembly->surfArray)[ind1]->torusPtr(), *torus2 = (assembly->surfArray)[ind2]->torusPtr();
-	 if (torus1 != NULL && torus2 != NULL) {
-		 double smRadius = torus1->lgRadius, smRad2 = torus2->lgRadius;
-		 // lgRadius of inner torus is the inner surface (rmin)
-		 if (smRad2 > smRadius)
-		 {
-			 smRad2 = smRadius;
-			 smRadius = torus2->smRadius;
-		 }
-		 double lgRadius = torus1->lgRadius, lgRad2 = torus2->lgRadius;
-		 if (lgRadius < lgRad2)
-		 {
-			 lgRadius = lgRad2;
-			 lgRad2 = torus1->lgRadius;
-		 }
-		 if (lgRadius == smRadius) // Only one surface -- it's solid
-			 smRadius = 0;
-		 const char *const name = nameIncr(TORUS_ID);
-		 xmlElem beginEnd, attrib1, attrib2;
-		 gdmlout << indent1 << beginEnd.openLenElem("torus") << attrib1.attribute("name", name) << attrib2.attribute("rtor", torus1->majorRadius);
-		 gdmlout << attrib1.attribute("rmin", smRadius) << attrib2.attribute("rmax", lgRadius);
-		 gdmlout << attrib1.attribute("startphi", 0.0);
-		 gdmlout << attrib1.attribute("deltaphi", torus1->angle) << beginEnd.closeElem() << endl;
-		 return (name);
-	 }
-	 cout << "Bad torus indexes " << ind1 << " " << ind2 << endl;
-	 return ("null name");
- }
+string torusesList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly)
+{
+	TorusSurf* torus1 = (assembly->surfArray)[ind1]->torusPtr(), * torus2 = (assembly->surfArray)[ind2]->torusPtr();
+	if (torus1 != NULL && torus2 != NULL) {
+		double smRadius = torus1->lgRadius, smRad2 = torus2->lgRadius;
+		// lgRadius of inner torus is the inner surface (rmin)
+		if (smRad2 > smRadius)
+		{
+			smRad2 = smRadius;
+			smRadius = torus2->smRadius;
+		}
+		double lgRadius = torus1->lgRadius, lgRad2 = torus2->lgRadius;
+		if (lgRadius < lgRad2)
+		{
+			lgRadius = lgRad2;
+			lgRad2 = torus1->lgRadius;
+		}
+		if (lgRadius == smRadius) // Only one surface -- it's solid
+			smRadius = 0;
+		const char* const name = nameIncr(TORUS_ID);
+		xmlElem beginEnd, attrib1, attrib2;
+		gdmlout << indent1 << beginEnd.openLenElem("torus") << attrib1.attribute("name", name) << attrib2.attribute("rtor", torus1->majorRadius);
+		gdmlout << attrib1.attribute("rmin", smRadius) << attrib2.attribute("rmax", lgRadius);
+		gdmlout << attrib1.attribute("startphi", 0.0);
+		gdmlout << attrib1.attribute("deltaphi", torus1->angle) << beginEnd.closeElem() << endl;
+		return (name);
+	}
+	cout << "Bad torus indexes " << ind1 << " " << ind2 << endl;
+	return ("null name");
+}
 
 
- string disksList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly)
- {
-	 DiskSurf *disk1 = (assembly->surfArray)[ind1]->diskPtr(), *disk2 = (assembly->surfArray)[ind2]->diskPtr();
-	 if (disk1 != NULL && disk2 != NULL && disk1->outRadius > 0) {
-		 const char *const name = nameIncr(DISK_ID);
-		 xmlElem beginEnd, attrib1, attrib2;
-		 double inRad = disk1->inRadius, outRad = disk1->outRadius;
-		 if (disk2->inRadius < inRad)
-			 inRad = disk2->inRadius;
-		 if (disk2->outRadius > outRad)
-			 outRad = disk2->outRadius;
-		 coords diffPos = (assembly->surfArray)[ind1]->position - (assembly->surfArray)[ind2]->position;
-		 double thickness = MIN_THICKNESS;
-		 double newThick = diffPos.length() * 2.0; // disk1 postion has already been averaged
-		 double angle = disk1->angle;
-		 if (disk2->angle > angle)
-			 angle = disk2->angle;
-		 if (newThick > MIN_THICKNESS && newThick < 0.7)
-			 thickness = newThick;
-		 gdmlout << indent1 << beginEnd.openLenElem("tube") << attrib1.attribute("name", name);
-		 gdmlout << attrib1.attribute("rmin", inRad) << attrib2.attribute("rmax", outRad);
-		 gdmlout << attrib1.attribute("deltaphi", angle) << attrib2.attribute("z", thickness) << beginEnd.closeElem() << endl;
-		 return (name);
-	 }
-	 cout << "Bad disk indexes " << ind1 << " " << ind2 << endl;
-	 return ("null name");
- }
+string disksList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly)
+{
+	DiskSurf* disk1 = (assembly->surfArray)[ind1]->diskPtr(), * disk2 = (assembly->surfArray)[ind2]->diskPtr();
+	if (disk1 != NULL && disk2 != NULL && disk1->outRadius > 0) {
+		const char* const name = nameIncr(DISK_ID);
+		xmlElem beginEnd, attrib1, attrib2;
+		double inRad = disk1->inRadius, outRad = disk1->outRadius;
+		if (disk2->inRadius < inRad)
+			inRad = disk2->inRadius;
+		if (disk2->outRadius > outRad)
+			outRad = disk2->outRadius;
+		coords diffPos = (assembly->surfArray)[ind1]->position - (assembly->surfArray)[ind2]->position;
+		double thickness = MIN_THICKNESS;
+		double newThick = diffPos.length() * 2.0; // disk1 postion has already been averaged
+		double angle = disk1->angle;
+		if (disk2->angle > angle)
+			angle = disk2->angle;
+		if (newThick > MIN_THICKNESS&& newThick < 0.7)
+			thickness = newThick;
+		gdmlout << indent1 << beginEnd.openLenElem("tube") << attrib1.attribute("name", name);
+		gdmlout << attrib1.attribute("rmin", inRad) << attrib2.attribute("rmax", outRad);
+		gdmlout << attrib1.attribute("deltaphi", angle) << attrib2.attribute("z", thickness) << beginEnd.closeElem() << endl;
+		return (name);
+	}
+	cout << "Bad disk indexes " << ind1 << " " << ind2 << endl;
+	return ("null name");
+}
 
 
- string boardsList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly)
- {
-	 BoardSurf *board1 = (assembly->surfArray)[ind1]->boardPtr(), *board2 = (assembly->surfArray)[ind2]->boardPtr();
-	 if (board1 != NULL && board2 != NULL) {
-		 const char *const name = nameIncr(BOARD_ID);
-		 xmlElem beginEnd, attrib1, attrib2;
-		 gdmlout << indent1 << beginEnd.openLenElem("box") << attrib1.attribute("name", name);
-		 // y axis appears to be default long axis
-		 gdmlout << attrib1.attribute("x", board1->width) << attrib2.attribute("y", board1->length);
-		 gdmlout << attrib1.attribute("z", MIN_THICKNESS) << beginEnd.closeElem() << endl;
-		 return (name);
-	 }
-	 cout << "Bad board indexes " << ind1 << " " << ind2 << endl;
-	 return ("null name");
- }
+string boardsList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly)
+{
+	BoardSurf* board1 = (assembly->surfArray)[ind1]->boardPtr(), * board2 = (assembly->surfArray)[ind2]->boardPtr();
+	if (board1 != NULL && board2 != NULL) {
+		const char* const name = nameIncr(BOARD_ID);
+		xmlElem beginEnd, attrib1, attrib2;
+		gdmlout << indent1 << beginEnd.openLenElem("box") << attrib1.attribute("name", name);
+		// y axis appears to be default long axis
+		gdmlout << attrib1.attribute("x", board1->width) << attrib2.attribute("y", board1->length);
+		gdmlout << attrib1.attribute("z", MIN_THICKNESS) << beginEnd.closeElem() << endl;
+		return (name);
+	}
+	cout << "Bad board indexes " << ind1 << " " << ind2 << endl;
+	return ("null name");
+}
 
 
- string ellipList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo *assembly)
- {
-	 EllipsoidSurf *ellip1 = (assembly->surfArray)[ind1]->ellipsoidPtr(), *ellip2 = (assembly->surfArray)[ind2]->ellipsoidPtr();
-	 if (ellip1 != NULL && ellip2 != NULL) {
-		 const char *const name = nameIncr(S_REVOLVE_ID);
-		 xmlElem beginEnd, attrib1, attrib2;
-		 gdmlout << indent1 << beginEnd.openLenElem("ellipsoid") << attrib1.attribute("name", name) << attrib2.attribute("ax", ellip1->ax);
-		 gdmlout << attrib1.attribute("by", ellip1->by) << attrib2.attribute("cz", ellip1->cz);
-		 gdmlout << attrib1.attribute("zcut1", ellip1->zcutLow) << beginEnd.closeElem() << endl;
-		 return (name);
-	 }
-	 cout << "Bad ellipsoid indexes " << ind1 << " " << ind2 << endl;
-	 return ("null name");
- }
+string ellipList::outputShapeDesc(const int ind1, const int ind2, AssemblyInfo* assembly)
+{
+	EllipsoidSurf* ellip1 = (assembly->surfArray)[ind1]->ellipsoidPtr(), * ellip2 = (assembly->surfArray)[ind2]->ellipsoidPtr();
+	if (ellip1 != NULL && ellip2 != NULL) {
+		const char* const name = nameIncr(S_REVOLVE_ID);
+		xmlElem beginEnd, attrib1, attrib2;
+		gdmlout << indent1 << beginEnd.openLenElem("ellipsoid") << attrib1.attribute("name", name) << attrib2.attribute("ax", ellip1->ax);
+		gdmlout << attrib1.attribute("by", ellip1->by) << attrib2.attribute("cz", ellip1->cz);
+		gdmlout << attrib1.attribute("zcut1", ellip1->zcutLow) << beginEnd.closeElem() << endl;
+		return (name);
+	}
+	cout << "Bad ellipsoid indexes " << ind1 << " " << ind2 << endl;
+	return ("null name");
+}
 
 
-void AssemblyInfo::outputShapeSetPart(shapeList *sList, const int ind1, const int ind2, bool averagePos)
+void AssemblyInfo::outputShapeSetPart(shapeList* sList, const int ind1, const int ind2, bool averagePos)
 {
 	partDesc newPart;
 	newPart.surfInd = ind1;
@@ -2902,8 +2914,8 @@ void AssemblyInfo::outputHole(const long baseInd, const long holeInd)
 {
 	xmlElem beginEnd, attrib1, attrib2, attrib3;
 	const string name = nameIncr(SUBTRACTION_ID);
-	const string &baseName = partArray[surfArray[baseInd]->partInd].nameID;
-	const string &subtractName = partArray[surfArray[holeInd]->partInd].nameID;
+	const string& baseName = partArray[surfArray[baseInd]->partInd].nameID;
+	const string& subtractName = partArray[surfArray[holeInd]->partInd].nameID;
 	gdmlout << indent1 << beginEnd.openSepElem("subtraction", attrib1.attribute("name", name.c_str())) << endl;
 	gdmlout << indent2 << beginEnd.openElem("first") << attrib1.attribute("ref", baseName.c_str());
 	gdmlout << beginEnd.closeElem() << endl;
@@ -2941,7 +2953,7 @@ void AssemblyInfo::outputHole(const long baseInd, const long holeInd)
 }
 
 
-void AssemblyInfo::outputSolids(shapeList *sList, bool looseMatch, bool singleSolids)
+void AssemblyInfo::outputSolids(shapeList* sList, bool looseMatch, bool singleSolids)
 {
 	for (vector<int>::iterator it = sList->shapeInds.begin(); it != sList->shapeInds.end(); ++it)
 	{
@@ -2978,7 +2990,7 @@ void AssemblyInfo::outputSolids(shapeList *sList, bool looseMatch, bool singleSo
 }
 
 
-void AssemblyInfo::breakUpFaces(shapeList *sList) {
+void AssemblyInfo::breakUpFaces(shapeList* sList) {
 	// Check for cylinders with inner & outer faces of different lengths
 	for (vector<int>::iterator it = sList->shapeInds.begin(); it != sList->shapeInds.end(); ++it)
 	{
@@ -2987,14 +2999,14 @@ void AssemblyInfo::breakUpFaces(shapeList *sList) {
 			{
 				if (it != it2 && surfArray[*it2]->wasOutput == false) {
 					if (surfArray[*it]->compNameStr.compare(surfArray[*it2]->compNameStr) == 0 &&
-							surfArray[*it]->axis == surfArray[*it2]->axis) {
+						surfArray[*it]->axis == surfArray[*it2]->axis) {
 						coords separation = surfArray[*it]->position - surfArray[*it2]->position;
 						if (surfArray[*it]->size() >= surfArray[*it2]->size() && separation.length() <= (surfArray[*it]->size() / 2.0)) {
-							CylSurf *cyl1 = surfArray[*it]->cylPtr(), *cyl2 = surfArray[*it2]->cylPtr();
+							CylSurf* cyl1 = surfArray[*it]->cylPtr(), * cyl2 = surfArray[*it2]->cylPtr();
 							// Allow radii to be merely close to each other
 							if (cyl1 != NULL && cyl2 != NULL && (approxEqual(cyl1->radius, cyl2->radius) || fabs(cyl1->radius - cyl2->radius) < 1.0)) {
 								outputShapeSetPart(sList, *it2, *it, false); // Use length & position of it2, the shorter one
-								cout << "Matching overlap indexes " << std::dec<< *it << " " << *it2 << endl;
+								cout << "Matching overlap indexes " << std::dec << *it << " " << *it2 << endl;
 							}
 							else cout << "No overlap, radii mismatch " << cyl1->radius << " " << cyl2->radius << endl;
 						}
@@ -3012,7 +3024,7 @@ void AssemblyInfo::breakUpFaces(shapeList *sList) {
 }
 
 
-void AssemblyInfo::findHoles(shapeList *sList) {
+void AssemblyInfo::findHoles(shapeList* sList) {
 	// Now check for left-over cylinders that might be holes
 	// For now, only allow cylindrical holes
 	for (vector<int>::iterator it = sList->shapeInds.begin(); it != sList->shapeInds.end(); ++it)
@@ -3023,7 +3035,7 @@ void AssemblyInfo::findHoles(shapeList *sList) {
 				if (edInd->second != *it && surfArray[edInd->second]->wasOutput && partArray[surfArray[edInd->second]->partInd].inBoolSolid == false) {
 					if (surfArray[*it]->compNameStr.compare(surfArray[edInd->second]->compNameStr) == 0 &&
 						edInd->first == surfArray[*it]->position && surfArray[*it]->holeSize() < surfArray[edInd->second]->size() &&
-							surfArray[*it]->size() < surfArray[edInd->second]->size()) {
+						surfArray[*it]->size() < surfArray[edInd->second]->size()) {
 						// Found matching edge for shape that was output
 						cout << "Found hole -- shape " << *it << " edge " << edInd->second << endl;
 						cout << "shape pos " << surfArray[*it]->position << " edge  pos" << edInd->first << endl;
@@ -3061,8 +3073,8 @@ void AssemblyInfo::getInitRot(const int index) {
 		return;
 	}
 	coords chkAxis = rotVecZYX(xaxis, surfArray[index]->rotation); // Apply rotation to x-axis to see where it lands
-	// cout << "x-axis lands here " << chkAxis << " but should be here " << surfArray[index]->startAxis << endl;
-	// cout << "Intended axis is " << surfArray[index]->axis << endl;
+																   // cout << "x-axis lands here " << chkAxis << " but should be here " << surfArray[index]->startAxis << endl;
+																   // cout << "Intended axis is " << surfArray[index]->axis << endl;
 	sanChk = checkZero(dotProd(chkAxis, surfArray[index]->axis));
 	if (sanChk != 0.0) {
 		cout << "*** chkAxis and axis not perpendicular! Even at wrong angle, should still be perpendicular!\n";
@@ -3077,7 +3089,7 @@ void AssemblyInfo::getInitRot(const int index) {
 		else if (remainAngle < -1.0)
 			remainAngle = -1.0;
 		remainAngle = acos(remainAngle);
-	} 
+	}
 	else {
 		cout << "Invalid null final x-axis -- failing to rotate axis. Bad rotation = " << surfArray[index]->rotation << endl;
 		return;
@@ -3113,10 +3125,10 @@ void AssemblyInfo::getInitRot(const int index) {
 	else cout << "Zero remain angle, no rotation adjustment needed\n";
 	/*
 	if (approxEqual(angleForX.x, 0) == false || approxEqual(angleForX.y, 0) == false || approxEqual(surfArray[index]->rotation.z, 0) == false) {
-		cout << "Bad calculation of z rot = " << angleForX << " for rotation " << surfArray[index]->rotation;
-		cout << " surfind " << index << endl;
-		cout << "Final axis and start axis = " << surfArray[index]->axis << " " << surfArray[index]->startAxis << endl;
-		cout << "transfAngle and transf axis = " << transfAngle << " " << transfXaxis << endl;
+	cout << "Bad calculation of z rot = " << angleForX << " for rotation " << surfArray[index]->rotation;
+	cout << " surfind " << index << endl;
+	cout << "Final axis and start axis = " << surfArray[index]->axis << " " << surfArray[index]->startAxis << endl;
+	cout << "transfAngle and transf axis = " << transfAngle << " " << transfXaxis << endl;
 	}
 	else surfArray[index]->rotation.z = angleForX.z;
 	*/
@@ -3124,7 +3136,7 @@ void AssemblyInfo::getInitRot(const int index) {
 
 
 // Protect against positions outside of the WorldBox
-static void fixBadPosition(coords &relPos)
+static void fixBadPosition(coords& relPos)
 {
 	static double MAX_POSITION = 99.0;
 	if (fabs(relPos.x) >= MAX_POSITION) {
@@ -3227,7 +3239,7 @@ void AssemblyInfo::outputParts()
 	outputSolids(&cylList, true); // Allow matches with differ radii but same lengths
 	breakUpFaces(&cylList);	// Inner & outer faces may have different lengths
 	findHoles(&cylList);	// For now, only cylinders can be holes.
-	// After all shapes processed, create holes.
+							// After all shapes processed, create holes.
 	for (vector<pair<int, int>>::iterator holeInd = holeList.begin(); holeInd != holeList.end(); ++holeInd) {
 		outputHole(holeInd->first, holeInd->second);
 	}
@@ -3308,7 +3320,7 @@ static void testrot()
 }
 
 
-const char *getTypeStr(long typeNum) {
+const char* getTypeStr(long typeNum) {
 	switch (typeNum) {
 	case swMateCOINCIDENT:
 		return ("conincident");
@@ -3334,7 +3346,7 @@ const char *getTypeStr(long typeNum) {
 	return ("other");
 }
 
-const char *getAlignStr(long alignNum) {
+const char* getAlignStr(long alignNum) {
 
 	switch (alignNum) {
 	case swMateAlignALIGNED:
@@ -3348,7 +3360,7 @@ const char *getAlignStr(long alignNum) {
 }
 
 
-void AssemblyInfo::doClosestAlign(const long index, coords &newAxis, const coords &direction) {
+void AssemblyInfo::doClosestAlign(const long index, coords& newAxis, const coords& direction) {
 	if (index == 0) {
 		newAxis = direction;
 		newAxis.normalize();
@@ -3364,8 +3376,8 @@ void AssemblyInfo::doClosestAlign(const long index, coords &newAxis, const coord
 }
 
 
-void AssemblyInfo::doAligned(int &alignCnt, bool &adjustDisplace, coords &location, const long index,
-	const long mateRefType, const int mateCnt, const long mateType, const coords &direction) {
+void AssemblyInfo::doAligned(int& alignCnt, bool& adjustDisplace, coords& location, const long index,
+	const long mateRefType, const int mateCnt, const long mateType, const coords& direction) {
 	// Give precedence to 1st Datumplane or second aligned entry when there are 2 or fewer mates
 	if ((index == 0 && mateRefType == swSelDATUMPLANES) ||
 		(mateCnt < 3 && index == 1)) {
@@ -3387,8 +3399,8 @@ void AssemblyInfo::doAligned(int &alignCnt, bool &adjustDisplace, coords &locati
 }
 
 
-void AssemblyInfo::doAntiAligned(bool &adjustDisplace, coords &location, const long index,
-const long mateRefType, const int mateCnt, const coords &direction, const coords &direction1) {
+void AssemblyInfo::doAntiAligned(bool& adjustDisplace, coords& location, const long index,
+	const long mateRefType, const int mateCnt, const coords& direction, const coords& direction1) {
 	if (index == 0) {
 		if (mateRefType == swSelDATUMPLANES) { // Anti-aligned datumplane seems to take precedence
 			mateInfo.displace = location;
@@ -3423,21 +3435,21 @@ const long mateRefType, const int mateCnt, const coords &direction, const coords
 	}
 }
 
-void AssemblyInfo::getMateFaces(IMate2 *const matePtr) const
+void AssemblyInfo::getMateFaces(IMate2* const matePtr) const
 {
 	VARIANT faceArray;
 	VariantInit(&faceArray);
 	hres = matePtr->GetSupplementalFaces(3L, &faceArray);
 	if (hres == S_OK) {
-		SAFEARRAY *facesview = V_ARRAY(&faceArray);
-		LPDISPATCH *srcptr = NULL;
+		SAFEARRAY* facesview = V_ARRAY(&faceArray);
+		LPDISPATCH* srcptr = NULL;
 		long lStartBound = 0;
 		long lEndBound = 0;
 		SafeArrayGetLBound(facesview, 1, &lStartBound);
 		SafeArrayGetUBound(facesview, 1, &lEndBound);
 		hres = SafeArrayAccessData(facesview, (void**)&srcptr);
 		if (hres == S_OK && srcptr) {
-			IFace2 *faceptr = NULL;
+			IFace2* faceptr = NULL;
 			for (int iIndex = lStartBound; iIndex <= lEndBound; iIndex++) {
 				hres = (srcptr[iIndex])->QueryInterface(__uuidof(IFace2), reinterpret_cast<void**>(&faceptr));
 				if (hres == S_OK && faceptr) {
@@ -3451,24 +3463,25 @@ void AssemblyInfo::getMateFaces(IMate2 *const matePtr) const
 			} // end for
 		}
 		else cout << "Failed to access Faces hres = " << std::hex << hres << " srcpr = " << srcptr << endl;
-	} else cout << "Failed to get Sup Faces, hres = " << std::hex << hres << endl;
+	}
+	else cout << "Failed to get Sup Faces, hres = " << std::hex << hres << endl;
 
 	/*
 	IFace2** faceptr = new IFace2*[10];
 	cout << "calling IGetSupFaces " << endl;
 	hres = matePtr->IGetSupplementalFaces(1, 2, faceptr);
 	if (hres == S_OK && faceptr != NULL && faceptr[0] != NULL) {
-		long cnt = -1;
-		cout << "deref faceptr to call GetEdgeCnt " << endl;
-		hres = faceptr[0]->GetEdgeCount(&cnt);
-		*/
+	long cnt = -1;
+	cout << "deref faceptr to call GetEdgeCnt " << endl;
+	hres = faceptr[0]->GetEdgeCount(&cnt);
+	*/
 
 }
 
 
-void AssemblyInfo::getMateEdge(IEntity  *const mateRefPtr, const coords &location, const coords &direction, bool &adjustDisplace)
+void AssemblyInfo::getMateEdge(IEntity* const mateRefPtr, const coords& location, const coords& direction, bool& adjustDisplace)
 {
-	IEdge *edgeptr = NULL;
+	IEdge* edgeptr = NULL;
 	hres = mateRefPtr->QueryInterface(__uuidof(IEdge), reinterpret_cast<void**>(&edgeptr));
 	if (hres == S_OK && edgeptr) {
 		CComPtr<ICurve> curveptr;
@@ -3498,8 +3511,8 @@ void AssemblyInfo::getMateEdge(IEntity  *const mateRefPtr, const coords &locatio
 }
 
 
-void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt,
-	coordList &displaceList, int mateInd, bool &adjustDisplace, int mateCnt, bool &meRadiiSame)
+void AssemblyInfo::showMate(IMate2* matePtr, coords& antiAlignTot, int& alignCnt,
+	coordList& displaceList, int mateInd, bool& adjustDisplace, int mateCnt, bool& meRadiiSame)
 {
 	// cout << "Found Mate2\n";
 	bool overallRotUnset = (mateInfo.overallRot.length() == 0);
@@ -3517,7 +3530,7 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 			coords newAxis, direction1, location1;
 			double radius1 = 0.0;
 			for (long index = 0; index < paramsSize; ++index) {
-				IMateEntity2 *mateEntity = NULL;
+				IMateEntity2* mateEntity = NULL;
 				hres = matePtr->MateEntity(index, &mateEntity);
 				if (hres == S_OK && mateEntity) {
 					// cout << "Found mate entity\n";
@@ -3534,7 +3547,7 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 							hres = mateEntity->get_EntityParams(&entityParams);
 							if (hres == S_OK) {
 								long paramBegin, paramLim;
-								double *paramArray = varDblArrayAccess(entityParams, paramBegin, paramLim);
+								double* paramArray = varDblArrayAccess(entityParams, paramBegin, paramLim);
 								if (paramLim - paramBegin >= 7) {
 									coords location(paramArray[0], paramArray[1], paramArray[2]);
 									coords direction(paramArray[3], paramArray[4], paramArray[5]);
@@ -3575,7 +3588,7 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 														mateInfo.displace.y += meRadius;
 													}
 												}
-											} 											
+											}
 											else mateInfo.displace.z -= meRadius;
 											cout << "May be using MateEntity radius 1 = " << meRadius << ", displace is now " << mateInfo.displace << endl;
 										}
@@ -3603,7 +3616,7 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 											mateCmpName = CW2A(sCmpName);
 											printbstr("comp name ", sCmpName);
 											if (overallRotUnset && mateInfo.overallRot.length() > 0 && align == swMateAlignANTI_ALIGNED &&
-													mateRefType != swSelDATUMPLANES && mateInd == 0) {
+												mateRefType != swSelDATUMPLANES && mateInd == 0) {
 												// Make sure overallRot was just set by this mate
 												// Only restrict overall rotation if it comes from first anti-aligned mate but not a
 												// datum planes mate that may have the owning assembly as its component
@@ -3612,10 +3625,10 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 										}
 									}
 									else cout << "Couldn't get mate entity ref comp hres ptr " << hres << " " << swComponentNxt << endl;
-									struct IDispatch *pMateRef = NULL;
+									struct IDispatch* pMateRef = NULL;
 									hres = mateEntity->get_Reference(&pMateRef);
 									if (hres == S_OK && pMateRef) {
-										IEntity *mateRefPtr = NULL;
+										IEntity* mateRefPtr = NULL;
 										hres = pMateRef->QueryInterface(__uuidof(IEntity), reinterpret_cast<void**>(&mateRefPtr));
 										if (hres == S_OK && mateRefPtr) {
 											CComBSTR sRefName;
@@ -3626,7 +3639,7 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 												// printbstr("Entity model name", sRefName);
 												cout << "type of mate entity reference = " << selectTypeStr(mateEntityRefType) << endl;
 												if (mateEntityRefType == swSelFACES) {
-													IFace2 *faceptr = NULL;
+													IFace2* faceptr = NULL;
 													hres = mateRefPtr->QueryInterface(__uuidof(IFace2), reinterpret_cast<void**>(&faceptr));
 													if (hres == S_OK && faceptr && mateCmpName.substr(0, compNameStr.length()) == compNameStr) {
 														if (meRadius != 0 && meRadius2 == 0 && mateType == swMateCONCENTRIC) {
@@ -3647,20 +3660,20 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 															else {
 																mateInfo.displdir = direction;
 																// if (align == swMateAlignANTI_ALIGNED) // anti-aligned implies a reflection
-																	// mateInfo.displdir = mateInfo.displdir * -1.0;
+																// mateInfo.displdir = mateInfo.displdir * -1.0;
 																cout << "Storing " << mateInfo.displdir << " for later rotation setting based on faces\n";
 																mateInfo.faceRot = true;
 																mateInfo.faceptr = faceptr;
 																mateInfo.startIndex = surfArrayInd;
 															}
 														}
-														else if (mateInfo.edgeSet == false && location.length() > 0 && 	mateType == swMateDISTANCE) {
+														else if (mateInfo.edgeSet == false && location.length() > 0 && mateType == swMateDISTANCE) {
 															cout << "Setting displace based upon matching faces for distance mate " << location << endl;
 															mateInfo.displace = location;
 															adjustDisplace = false;
 															mateInfo.edgeSet = true;
 														}
-														if (mateType == swMateCOINCIDENT && align == swMateAlignALIGNED && 	mateRefType == swSelFACES) {
+														if (mateType == swMateCOINCIDENT && align == swMateAlignALIGNED && mateRefType == swSelFACES) {
 															mateInfo.displdir = direction;
 															mateInfo.displpos = location;
 															double area = 0;
@@ -3695,43 +3708,43 @@ void AssemblyInfo::showMate(IMate2 *matePtr, coords &antiAlignTot, int &alignCnt
 
 /*
 void AssemblyInfo::showMateEntity(CComPtr<IFeature> swFeature) {
-	CComPtr<IFeature> swSubFeature;
-	hres = swFeature->IGetFirstSubFeature(&swSubFeature);
-	while (hres == S_OK && swSubFeature) {
-		cout << "Found sub-feature\n";
-		CComBSTR sGetFeatureName;
-		hres = swSubFeature->get_Name(&sGetFeatureName);
-		CW2A featurenam(sGetFeatureName);
-		if (hres == S_OK && sGetFeatureName) {
-			cout << "sub-feature name " << featurenam << endl;
-		}
-		struct IDispatch *pMate2;
-		hres = swSubFeature->GetSpecificFeature2(&pMate2);
-		if (hres == S_OK && pMate2) {
-			IMate2 *matePtr = NULL;
-			hres = pMate2->QueryInterface(__uuidof(IMate2), reinterpret_cast<void**>(&matePtr));
-			if (hres == S_OK && matePtr) {
-				showMate(matePtr);
-			}
-		}
-		cout << "Getting next subfeature\n";
-		CComPtr<IFeature> swNxtSubFeature;
-		hres = swFeature->IGetNextSubFeature(&swNxtSubFeature);
-		swSubFeature = swNxtSubFeature;
-	} // end while
-	cout << "Couldn't find sub-feature hres ptr " << hres << " " << swSubFeature << endl;
+CComPtr<IFeature> swSubFeature;
+hres = swFeature->IGetFirstSubFeature(&swSubFeature);
+while (hres == S_OK && swSubFeature) {
+cout << "Found sub-feature\n";
+CComBSTR sGetFeatureName;
+hres = swSubFeature->get_Name(&sGetFeatureName);
+CW2A featurenam(sGetFeatureName);
+if (hres == S_OK && sGetFeatureName) {
+cout << "sub-feature name " << featurenam << endl;
+}
+struct IDispatch *pMate2;
+hres = swSubFeature->GetSpecificFeature2(&pMate2);
+if (hres == S_OK && pMate2) {
+IMate2 *matePtr = NULL;
+hres = pMate2->QueryInterface(__uuidof(IMate2), reinterpret_cast<void**>(&matePtr));
+if (hres == S_OK && matePtr) {
+showMate(matePtr);
+}
+}
+cout << "Getting next subfeature\n";
+CComPtr<IFeature> swNxtSubFeature;
+hres = swFeature->IGetNextSubFeature(&swNxtSubFeature);
+swSubFeature = swNxtSubFeature;
+} // end while
+cout << "Couldn't find sub-feature hres ptr " << hres << " " << swSubFeature << endl;
 }
 */
 
 
-static coords getVarCoords(CComPtr<IMathVector> transfCoords, const char *const msg) {
+static coords getVarCoords(CComPtr<IMathVector> transfCoords, const char* const msg) {
 	coords retCoord;
 	VARIANT theCoord;
 	VariantInit(&theCoord);
 	hres = transfCoords->get_ArrayData(&theCoord);
 	if (hres == S_OK) {
-		SAFEARRAY *coordView = V_ARRAY(&theCoord);
-		double *coordptr = NULL;
+		SAFEARRAY* coordView = V_ARRAY(&theCoord);
+		double* coordptr = NULL;
 		long lStartBound = 0;
 		long lEndBound = 0;
 		SafeArrayGetLBound(coordView, 1, &lStartBound);
@@ -3753,7 +3766,7 @@ static coords getVarCoords(CComPtr<IMathVector> transfCoords, const char *const 
 }
 
 
-void AssemblyInfo::getTransf(IComponent2 *swSelectedComponent) {
+void AssemblyInfo::getTransf(IComponent2* swSelectedComponent) {
 	mateInfo.clear(); // Clear values from previous component
 	CComPtr<IMathTransform> transform;
 	hres = swSelectedComponent->get_Transform2(&transform);
@@ -3792,7 +3805,7 @@ void AssemblyInfo::getTransf(IComponent2 *swSelectedComponent) {
 }
 
 // No longer used, but code may be useful in the future
-void AssemblyInfo::getMates(IComponent2 *swSelectedComponent) {
+void AssemblyInfo::getMates(IComponent2* swSelectedComponent) {
 	mateInfo.clear(); // Clear values from previous component
 	VARIANT mateList;
 	VariantInit(&mateList);
@@ -3804,7 +3817,7 @@ void AssemblyInfo::getMates(IComponent2 *swSelectedComponent) {
 			SAFEARRAY* psaMate = V_ARRAY(&mateList);
 			LPDISPATCH* pMateDispArray = NULL;
 			long nMateHighIndex = -1;
-			hres = SafeArrayAccessData(psaMate, (void **)&pMateDispArray);
+			hres = SafeArrayAccessData(psaMate, (void**)&pMateDispArray);
 			if (hres == S_OK && pMateDispArray != NULL) {
 				// Get index number of highest array element
 				// The array range is from 0 to highIndex
@@ -3860,17 +3873,17 @@ void AssemblyInfo::getMates(IComponent2 *swSelectedComponent) {
 }
 
 
-static void processComp(IComponent2* swSelectedComponent, CComPtr<ISelectData> &swSelData,
-		AssemblyInfo &assembly) {
+static void processComp(IComponent2* swSelectedComponent, CComPtr<ISelectData>& swSelData,
+	AssemblyInfo& assembly) {
 	assembly.getTransf(swSelectedComponent);
 	CComPtr<IMeasure> mymeasure;
 	bool measok = false;
 	hres = swSelectedComponent->Select4(VARIANT_FALSE, swSelData, VARIANT_TRUE, &retVal);
 	cout << "comp select4 results hres retval " << std::hex << hres << " " << retVal << endl;
 	// hres = swSelectedComponent->IsHidden();
-	struct IDispatch *swModelNxt = NULL;
-	IModelDoc2 *nxtmodel = NULL;
-	IPartDoc *partptr = NULL;
+	struct IDispatch* swModelNxt = NULL;
+	IModelDoc2* nxtmodel = NULL;
+	IPartDoc* partptr = NULL;
 	hres = swSelectedComponent->GetModelDoc2(&swModelNxt);
 	if (hres == S_OK && swModelNxt) {
 		cout << "trying model of component\n";
@@ -3884,8 +3897,8 @@ static void processComp(IComponent2* swSelectedComponent, CComPtr<ISelectData> &
 				CComBSTR materialName(L"");
 				hres = partptr->GetMaterialPropertyName2(L"Default", &dbase, &materialName);
 				strcpy_s(assembly.matNameStr, CW2A(materialName));
-				char *spc = NULL;
-				char *spot = assembly.matNameStr;
+				char* spc = NULL;
+				char* spot = assembly.matNameStr;
 				while ((spc = strpbrk(spot, " ()*")) != NULL) {
 					// Convert disallowed characters to avoid Geant4 errors
 					switch (*spc) {
@@ -3949,7 +3962,7 @@ static void processComp(IComponent2* swSelectedComponent, CComPtr<ISelectData> &
 			LPDISPATCH* pBodyDispArray = NULL;
 			long nBodyHighIndex = -1;
 			long nBodyCount = -1;
-			hres = SafeArrayAccessData(psaBody, (void **)&pBodyDispArray);
+			hres = SafeArrayAccessData(psaBody, (void**)&pBodyDispArray);
 			if (hres == S_OK && pBodyDispArray != NULL) {
 				// Get index number of highest array element
 				// The array range is from 0 to highIndex
@@ -3986,8 +3999,8 @@ static void processComp(IComponent2* swSelectedComponent, CComPtr<ISelectData> &
 								int facetype = facearray.vt & ~(VT_ARRAY);
 								cout << "facetype & fvt are " << facetype << " " << oneface.vt << endl;
 								if (measok && facetype > 0) {
-									SAFEARRAY *facesview = V_ARRAY(&facearray);
-									LPDISPATCH *srcptr = NULL;
+									SAFEARRAY* facesview = V_ARRAY(&facearray);
+									LPDISPATCH* srcptr = NULL;
 									long lStartBound = 0;
 									long lEndBound = 0;
 									SafeArrayGetLBound(facesview, 1, &lStartBound);
@@ -4034,12 +4047,13 @@ static void processComp(IComponent2* swSelectedComponent, CComPtr<ISelectData> &
 			cout << "getbodies failed hres pparray " << std::hex << hres << " " << bodyvar.pparray << endl;
 			// getChildComponents(swSelectedComponent);
 		}
-	} else cout << "failed to get model doc hres = " << hres << " ptr = " << swModelNxt << endl;
+	}
+	else cout << "failed to get model doc hres = " << hres << " ptr = " << swModelNxt << endl;
 }
 
 
-static void procComponents(IComponent2* swSelectedComponent, CComPtr<ISelectData> &swSelData,
-	AssemblyInfo &assembly) {
+static void procComponents(IComponent2* swSelectedComponent, CComPtr<ISelectData>& swSelData,
+	AssemblyInfo& assembly) {
 	static bool debugAllow = true;
 	CComBSTR sPathName(L"");
 	hres = swSelectedComponent->GetPathName(&sPathName);
@@ -4066,7 +4080,7 @@ static void procComponents(IComponent2* swSelectedComponent, CComPtr<ISelectData
 			LPDISPATCH* pCompDispArray = NULL;
 			long nCompHighIndex = -1;
 			long nCompCount = -1;
-			hres = SafeArrayAccessData(psaComp, (void **)&pCompDispArray);
+			hres = SafeArrayAccessData(psaComp, (void**)&pCompDispArray);
 			if (hres == S_OK && pCompDispArray != NULL) {
 				// Get index number of highest array element
 				// The array range is from 0 to highIndex
@@ -4106,7 +4120,7 @@ static void procComponents(IComponent2* swSelectedComponent, CComPtr<ISelectData
 
 // Gets related components to Local Linear Pattern seed component and
 // sets their displacement to match the pattern displacement
-void AssemblyInfo::getRelatedComps(IComponent2 *baseComp) {
+void AssemblyInfo::getRelatedComps(IComponent2* baseComp) {
 	CComBSTR sCmpName;
 	hres = baseComp->get_Name2(&sCmpName);
 	if (hres == S_OK && sCmpName)
@@ -4121,12 +4135,13 @@ void AssemblyInfo::getRelatedComps(IComponent2 *baseComp) {
 		static const string referenceType("Reference");
 		string compName;
 		unsigned int patternCnt = -1;
-		for (vector<GenericSurf *>::iterator it = surfArray.begin(); it != surfArray.end(); ++it) {
+		for (vector<GenericSurf*>::iterator it = surfArray.begin(); it != surfArray.end(); ++it) {
 			if ((*it)->pathNameStr.compare(seedPath) == 0) {
 				if ((*it)->featureTypeStr.compare(referenceType) == 0) {
 					if (mateInfo.rotMatrix.empty() && (*it)->overallRotMatrix.empty() == false)	// Get overallRot from base seed component
 						mateInfo.rotMatrix = (*it)->overallRotMatrix;
-				} else if ((*it)->featureTypeStr.compare(patternType) == 0) {
+				}
+				else if ((*it)->featureTypeStr.compare(patternType) == 0) {
 					if (compName.size() == 0 || (*it)->compNameStr.compare(compName) != 0) {
 						compName = (*it)->compNameStr;
 						++patternCnt;
@@ -4145,27 +4160,27 @@ void AssemblyInfo::getRelatedComps(IComponent2 *baseComp) {
 // Find the seed component of the Local Linear Pattern and 
 // gets related components to Local Linear Pattern seed component and
 // sets their displacement to match the pattern displacement
-void AssemblyInfo::getSeedComps(ILocalLinearPatternFeatureData *const linpattern) {
+void AssemblyInfo::getSeedComps(ILocalLinearPatternFeatureData* const linpattern) {
 	VARIANT seedarr;
 	VariantInit(&seedarr);
 	hres = linpattern->get_SeedComponentArray(&seedarr);
 	if (hres == S_OK) {
-		SAFEARRAY *seedView = V_ARRAY(&seedarr);
-		LPDISPATCH *seedptr = NULL;
+		SAFEARRAY* seedView = V_ARRAY(&seedarr);
+		LPDISPATCH* seedptr = NULL;
 		long lStartBound = 0;
 		long lEndBound = 0;
 		SafeArrayGetLBound(seedView, 1, &lStartBound);
 		SafeArrayGetUBound(seedView, 1, &lEndBound);
-		hres = SafeArrayAccessData(seedView, (void**) &seedptr);
+		hres = SafeArrayAccessData(seedView, (void**)&seedptr);
 		if (hres == S_OK && seedptr) {
 			for (int ind = lStartBound; ind <= lEndBound; ind++) {
 				CComQIPtr<IFeature> featptr = seedptr[ind];
 				cout << "Found feature ptr " << featptr << endl;
 				if (featptr) {
-					struct IDispatch *pComp;
+					struct IDispatch* pComp;
 					hres = featptr->GetSpecificFeature2(&pComp);
 					if (hres == S_OK && pComp) {
-						IComponent2 *compPtr = NULL;
+						IComponent2* compPtr = NULL;
 						hres = pComp->QueryInterface(__uuidof(IComponent2), reinterpret_cast<void**>(&compPtr));
 						if (hres == S_OK && compPtr) {
 							getRelatedComps(compPtr);
@@ -4191,7 +4206,7 @@ void AssemblyInfo::getSeedComps(ILocalLinearPatternFeatureData *const linpattern
 // calculate the displacements of the three components.
 // It appears the two base directions of the linear pattern are x (D1) and z (D2).
 // Currently only support a pattern with 4 vertices.
-void AssemblyInfo::getTransfDisplace(ILocalLinearPatternFeatureData *linpattern, double xspacing, double zspacing)
+void AssemblyInfo::getTransfDisplace(ILocalLinearPatternFeatureData* linpattern, double xspacing, double zspacing)
 {
 	pattDisplaceList.clear();
 	mateInfo.overallRot = origin;	// Clear previous value
@@ -4247,7 +4262,7 @@ void AssemblyInfo::getTransfDisplace(ILocalLinearPatternFeatureData *linpattern,
 // What else is needed? What does spacing mean for circular pattern?
 // Seed components are components that are related to the pattern.
 template<class T>
-double CircPattFuncs<T>::getSpacing(T *patternType, AssemblyInfo &assembly) {
+double CircPattFuncs<T>::getSpacing(T* patternType, AssemblyInfo& assembly) {
 	// Need similar code as for linear pattern, but circular pattern has different methods
 	double spacing = 0;
 	hres = thePattern->get_Spacing(&spacing);
@@ -4256,7 +4271,7 @@ double CircPattFuncs<T>::getSpacing(T *patternType, AssemblyInfo &assembly) {
 }
 
 template<class T>
-double LinPattFuncs<T>::getSpacing(T *thePattern, AssemblyInfo &assembly) {
+double LinPattFuncs<T>::getSpacing(T* thePattern, AssemblyInfo& assembly) {
 	double xspacing = 0;
 	hres = thePattern->get_D1Spacing(&xspacing);
 	cout << "D1 spacing " << xspacing << endl;
@@ -4289,7 +4304,7 @@ double LinPattFuncs<T>::getSpacing(T *thePattern, AssemblyInfo &assembly) {
 	cout << "D2 instances is " << d2Cnt << endl;
 	int totInstances = cnt + d2Cnt - 1; // Don't count seed instance
 	cout << "Instance total = " << totInstances << endl;
-	struct IDispatch *RefAxisDisp;
+	struct IDispatch* RefAxisDisp;
 	hres = thePattern->get_D1Axis(&RefAxisDisp);
 	if (hres == S_OK && RefAxisDisp) {
 		UINT typeCnt = -1;
@@ -4315,7 +4330,7 @@ double LinPattFuncs<T>::getSpacing(T *thePattern, AssemblyInfo &assembly) {
 		// hres = RefAxisDisp->QueryInterface(IID_IRefAxis, reinterpret_cast<void**>(&refAxis));
 		// RefAxisDisp->Release();
 		if (false) {
-			double *axisArray = new double[7];
+			double* axisArray = new double[7];
 			hres = refAxis->IGetRefAxisParams(axisArray);
 			cout << "Found ref axis feature data\n";
 			if (hres == S_OK) {
@@ -4331,9 +4346,9 @@ double LinPattFuncs<T>::getSpacing(T *thePattern, AssemblyInfo &assembly) {
 }
 
 template<typename T>
-void AssemblyInfo::procPattern(CComPtr<IFeature> swFeature, IModelDoc2* swModel, PatternFuncs<T> *pattfuncs) {
-	struct IDispatch *pPatternDisp;
-	T *thePattern;
+void AssemblyInfo::procPattern(CComPtr<IFeature> swFeature, IModelDoc2* swModel, PatternFuncs<T>* pattfuncs) {
+	struct IDispatch* pPatternDisp;
+	T* thePattern;
 	hres = swFeature->GetDefinition(&pPatternDisp);
 	if (hres == S_OK && pPatternDisp) {
 		cout << "Found Local Circular or Linear Pattern definition " << endl;
@@ -4353,18 +4368,18 @@ void AssemblyInfo::procPattern(CComPtr<IFeature> swFeature, IModelDoc2* swModel,
 	else cout << "Failed to get local pattern definition retval = " << hres << " ptr = " << pPatternDisp << endl;
 }
 
-void AssemblyInfo::chkPatterns(CComPtr<IFeature> swFeature, IModelDoc2* swModel, const CComBSTR &sTypeName) {
+void AssemblyInfo::chkPatterns(CComPtr<IFeature> swFeature, IModelDoc2* swModel, const CComBSTR& sTypeName) {
 	const CComBSTR sLocalPatternTypeName(L"LocalLPattern");
 	if (VarBstrCmp(sTypeName, sLocalPatternTypeName, 0, 0) == 1) {
 		LinPattFuncs<ILocalLinearPatternFeatureData> pattfuncs;
 		procPattern<ILocalLinearPatternFeatureData>(swFeature, swModel, &pattfuncs);
 		return;
-		/******  
+		/******
 		Above line should do everything that is below. Can delete below when sure all is OK
 		Also need if for circular pattern
 		*/
-		struct IDispatch *pPatternDisp;
-		ILocalLinearPatternFeatureData *linpattern;
+		struct IDispatch* pPatternDisp;
+		ILocalLinearPatternFeatureData* linpattern;
 		hres = swFeature->GetDefinition(&pPatternDisp);
 		if (hres == S_OK && pPatternDisp) {
 			cout << "Found Local Linear Pattern definition " << endl;
@@ -4407,7 +4422,7 @@ void AssemblyInfo::chkPatterns(CComPtr<IFeature> swFeature, IModelDoc2* swModel,
 					cout << "D2 instances is " << d2Cnt << endl;
 					int totInstances = cnt + d2Cnt - 1; // Don't count seed instance
 					cout << "Instance total = " << totInstances << endl;
-					struct IDispatch *RefAxisDisp;
+					struct IDispatch* RefAxisDisp;
 					hres = linpattern->get_D1Axis(&RefAxisDisp);
 					if (hres == S_OK && RefAxisDisp) {
 						UINT typeCnt = -1;
@@ -4433,7 +4448,7 @@ void AssemblyInfo::chkPatterns(CComPtr<IFeature> swFeature, IModelDoc2* swModel,
 						// hres = RefAxisDisp->QueryInterface(IID_IRefAxis, reinterpret_cast<void**>(&refAxis));
 						// RefAxisDisp->Release();
 						if (false) {
-							double *axisArray = new double[7];
+							double* axisArray = new double[7];
 							hres = refAxis->IGetRefAxisParams(axisArray);
 							cout << "Found ref axis feature data\n";
 							if (hres == S_OK) {
@@ -4502,7 +4517,7 @@ void TraverseFeatureManagerDesignTree(IModelDoc2* swModel, ISldWorks* swApp)
 	gdmlout << attrib1.attribute("x", WORLD_BOX_SIZE) << attrib2.attribute("y", WORLD_BOX_SIZE) << attrib3.attribute("z", WORLD_BOX_SIZE);
 	gdmlout << beginEnd.closeElem() << endl;
 	AssemblyInfo assembly;
-	do	{
+	do {
 		hres = swFeature->get_Name(&sGetFeatureName);
 		CW2A featurenam(sGetFeatureName);
 		if (hres == S_OK && sGetFeatureName) {
@@ -4516,7 +4531,7 @@ void TraverseFeatureManagerDesignTree(IModelDoc2* swModel, ISldWorks* swApp)
 			assembly.featureTypeStr = typeNameStr;
 			CComBSTR sMateGroup("MateGroup");
 			// if (VarBstrCmp(sTypeName, sMateGroup, 0, 0) == 1) {
-				// showMateEntity(swFeature);
+			// showMateEntity(swFeature);
 			// }
 		}
 		else cout << "No type name\n";
@@ -4524,7 +4539,7 @@ void TraverseFeatureManagerDesignTree(IModelDoc2* swModel, ISldWorks* swApp)
 			// if (VarBstrCmp(sGetFeatureName, sFeatureName7, 0, 0) != 1 && VarBstrCmp(sGetFeatureName, sFeatureName8, 0, 0) != 1 &&
 			// VarBstrCmp(sGetFeatureName, sFeatureName9, 0, 0) != 1 && VarBstrCmp(sGetFeatureName, sFeatureName10, 0, 0) != 1 &&
 			// VarBstrCmp(sGetFeatureName, sFeatureName11, 0, 0) != 1)
-		// if (VarBstrCmp(sGetFeatureName, sFeatureName, 0, 0) == 1 || VarBstrCmp(sGetFeatureName, sFeatureName3, 0, 0) == 1 ||
+			// if (VarBstrCmp(sGetFeatureName, sFeatureName, 0, 0) == 1 || VarBstrCmp(sGetFeatureName, sFeatureName3, 0, 0) == 1 ||
 			// VarBstrCmp(sGetFeatureName, sFeatureName2, 0, 0) == 1 || VarBstrCmp(sGetFeatureName, sFeatureName6, 0, 0) == 1 ||
 			// VarBstrCmp(sGetFeatureName, sFeatureName6, 0, 0) == 1)
 		{
@@ -4541,7 +4556,7 @@ void TraverseFeatureManagerDesignTree(IModelDoc2* swModel, ISldWorks* swApp)
 					swSelMgr->GetSelectedObjectCount2(-1, &lNumSelections);
 					cout << "num selections = " << lNumSelections << endl;
 
-					struct IDispatch *pComponentDisp;
+					struct IDispatch* pComponentDisp;
 					CComPtr<ISelectData> swSelData;
 					hres = swSelMgr->CreateSelectData(&swSelData);
 					if (hres == S_OK && swSelData)
@@ -4563,14 +4578,15 @@ void TraverseFeatureManagerDesignTree(IModelDoc2* swModel, ISldWorks* swApp)
 						long indexList[1] = { 1 };
 						hres = swSelMgr->IDeSelect2(1, indexList, -1, &deselOK);
 						cout << "Result of deselect hres retval " << std::hex << hres << " " << deselOK << endl;
-					} else cout << "Failed to get selected objects retval = " << hres << " ptr = " << pComponentDisp << endl;
+					}
+					else cout << "Failed to get selected objects retval = " << hres << " ptr = " << pComponentDisp << endl;
 				}
 				hres = swFeature->DeSelect(&retVal); // Said to be dangerous and might fail
 				if (hres != S_OK || !retVal)
 					cout << "Failed to DeSelect feature\n";
 				cout << endl; // Blank line to separate features
 			} // end if select feature
-		} 
+		}
 		//Get next feature
 
 		CComPtr<IFeature> swFeatureNext;
@@ -4582,7 +4598,7 @@ void TraverseFeatureManagerDesignTree(IModelDoc2* swModel, ISldWorks* swApp)
 		swFeature = swFeatureNext;
 		// static int cnter = 0;
 		// if (++cnter > 20)
-			// bFoundComponents = true;
+		// bFoundComponents = true;
 	} while (hres == S_OK && swFeature && !bFoundComponents);
 	assembly.outputParts();
 }
@@ -4597,4 +4613,3 @@ void CloseDocuments(ISldWorks* swApp)
 	swApp->CloseAllDocuments(true, &retVal);
 
 }
-
